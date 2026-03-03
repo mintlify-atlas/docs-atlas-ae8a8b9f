@@ -1,0 +1,106 @@
+{
+  "projectType": "frontend",
+  "projectName": "Hedera DX Starter Kit",
+  "projectDescription": "Modern Next.js starter kit for building Hedera dApps with wallet integration and Mirror Node API access.",
+  "theme": "palm",
+  "primaryColor": "#5E5CE6",
+  "lightColor": "#818CF8",
+  "darkColor": "#4338CA",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/wallet-integration",
+              "concepts/mirror-node",
+              "concepts/hedera-services"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/connect-wallet",
+              "guides/fetch-account-data",
+              "guides/token-balances",
+              "guides/transaction-history"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "components/overview",
+              "components/wallet-connect",
+              "components/account-details",
+              "components/api-playground"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Services",
+            "pages": [
+              "api/mirror-node-service",
+              "api/hedera-service"
+            ]
+          },
+          {
+            "group": "Contexts & Hooks",
+            "pages": [
+              "api/wallet-context",
+              "api/use-wallet"
+            ]
+          },
+          {
+            "group": "Types",
+            "pages": [
+              "api/types"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Next.js 15 with TypeScript and React 19",
+    "MetaMask and HashPack wallet integration via WalletConnect",
+    "Mirror Node REST API integration for account data",
+    "Token balance viewer with HTS metadata",
+    "Transaction history browser",
+    "Interactive tutorial system",
+    "shadcn/ui component library with Tailwind CSS",
+    "Storybook component development"
+  ],
+  "publicApiSurface": [
+    "MirrorNodeService.getInstance()",
+    "MirrorNodeService.getAccountInfo(accountId)",
+    "MirrorNodeService.getAccountTokenBalances(accountId)",
+    "MirrorNodeService.getTokenInfo(tokenId)",
+    "MirrorNodeService.getAccountTransactions(accountId, limit)",
+    "MirrorNodeService.getAccountTokenBalancesWithInfo(accountId)",
+    "MirrorNodeService.formatHbar(tinybars)",
+    "MirrorNodeService.formatTokenAmount(amount, decimals)",
+    "HederaService.getInstance()",
+    "HederaService.sendHbar(fromAccountId, toAccountId, amount)",
+    "HederaService.createToken(accountId, name, symbol, initialSupply, decimals)",
+    "useWallet() hook",
+    "WalletContext provider",
+    "<WalletConnect /> component",
+    "<AccountDetails /> component",
+    "<ApiPlayground /> component"
+  ]
+}
