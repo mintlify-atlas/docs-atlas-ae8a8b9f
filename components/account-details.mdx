@@ -1,0 +1,349 @@
+---
+title: AccountDetails component
+description: Account information display component
+---
+
+The `AccountDetails` component displays comprehensive account information fetched from the Hedera Mirror Node. It shows account balances, token holdings, and transaction history in a tabbed interface.
+
+## Overview
+
+Location: `src/components/AccountDetails.tsx`
+
+This component provides three main views:
+1. **Overview**: Account balance, token count, and metadata
+2. **Tokens**: Detailed list of all HTS token balances
+3. **History**: Recent transaction history
+
+## Usage
+
+```tsx
+import { AccountDetails } from '@/components/AccountDetails';
+
+export default function Page() {
+  return (
+    <div>
+      <AccountDetails />
+    </div>
+  );
+}
+```
+
+The component automatically fetches data for the connected wallet account.
+
+## Props
+
+The `AccountDetails` component does not accept any props. It reads wallet state from `WalletContext` and fetches data automatically.
+
+## Component Structure
+
+### Header Section
+
+Displays account ID with utility actions:
+
+```tsx
+<div className="px-6 py-4 border-b border-border">
+  <div className="flex items-center justify-between">
+    {/* Account ID with copy button */}
+    {/* Refresh and HashScan buttons */}
+  </div>
+</div>
+```
+
+**Actions:**
+- **Copy**: Copies account ID to clipboard
+- **Refresh**: Re-fetches all account data from Mirror Node
+- **HashScan**: Opens account on HashScan explorer
+
+### Tab Navigation
+
+Three tabs for different data views:
+
+```typescript
+const tabs = [
+  { id: 'overview', label: 'Overview', icon: Wallet },
+  { id: 'tokens', label: 'Tokens', icon: Coins },
+  { id: 'history', label: 'History', icon: History },
+];
+```
+
+## Data Tabs
+
+<Tabs>
+  <Tab title="Overview">
+    The Overview tab displays:
+
+    ### HBAR Balance Card
+    ```tsx
+    <div className="bg-muted/50 rounded-lg p-4">
+      <h4>HBAR Balance</h4>
+      <p className="text-2xl font-bold">
+        {formatHbar(balance)} HBAR
+      </p>
+      <p className="text-xs">
+        ~${(hbarAmount * 0.10).toFixed(4)} USD
+      </p>
+    </div>
+    ```
+
+    ### Tokens Owned Card
+    Shows the count of associated HTS tokens:
+    ```tsx
+    <div className="bg-muted/50 rounded-lg p-4">
+      <h4>Tokens Owned</h4>
+      <p className="text-2xl font-bold">{tokenBalances.length}</p>
+      <p className="text-xs">HTS tokens associated</p>
+    </div>
+    ```
+
+    ### Account Information
+    Displays metadata from Mirror Node:
+    - **Created**: Account creation timestamp
+    - **EVM Address**: Associated EVM address (if available)
+    - **Auto Token Associations**: Maximum automatic token association slots
+    - **Memo**: Account memo field
+
+    ### MetaMask Notice
+    For MetaMask connections, shows a notice:
+    ```tsx
+    <div className="bg-muted/50 rounded-lg p-6 text-center">
+      <p>MetaMask detected - Account data may be limited</p>
+      <p>For full functionality, please use HashPack via WalletConnect</p>
+    </div>
+    ```
+  </Tab>
+
+  <Tab title="Tokens">
+    The Tokens tab displays all HTS token balances:
+
+    ### Token List
+    Each token is displayed with:
+    - Token icon (Coins icon with primary color)
+    - Token name and symbol
+    - Token ID
+    - Balance (formatted with decimals)
+    - Decimal count
+
+    ```tsx
+    {tokenBalances.map((token) => (
+      <div key={token.token_id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+        <div className="flex-1">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-primary/10 rounded-full">
+              <Coins className="h-4 w-4 text-primary" />
+            </div>
+            <div>
+              <h4>{token.name || 'Unknown Token'}</h4>
+              <p className="text-sm">{token.symbol || 'N/A'} • ID: {token.token_id}</p>
+            </div>
+          </div>
+        </div>
+        <div className="text-right">
+          <p>{formatTokenAmount(token.balance, token.decimals)}</p>
+          <p className="text-xs">{token.decimals ?? 0} decimals</p>
+        </div>
+      </div>
+    ))}
+    ```
+
+    ### Empty State
+    When no tokens are found:
+    ```tsx
+    <div className="text-center py-8">
+      <Coins className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+      <p>No tokens found</p>
+      <p className="text-sm">This view reads token associations from Mirror Node.</p>
+    </div>
+    ```
+  </Tab>
+
+  <Tab title="History">
+    The History tab shows recent transactions:
+
+    ### Transaction List
+    Each transaction displays:
+    - Success/failure indicator (colored dot)
+    - Transaction type (name)
+    - Timestamp
+    - Transaction fee in HBAR
+    - Transaction ID
+    - Link to HashScan
+
+    ```tsx
+    {transactions.map((tx) => {
+      const status = getTransactionStatus(tx.result);
+      return (
+        <div key={tx.consensus_timestamp} className="p-4 bg-muted/50 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className={`w-2 h-2 rounded-full ${
+                status.success ? 'bg-accent' : 'bg-destructive'
+              }`} />
+              <span>{tx.name}</span>
+            </div>
+            <span className="text-xs">{formatDate(tx.consensus_timestamp)}</span>
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm">Fee: {formatHbar(tx.charged_tx_fee)} HBAR</p>
+              <p className="text-xs font-mono">{tx.transaction_id}</p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open(`https://hashscan.io/testnet/transaction/${tx.consensus_timestamp}`, '_blank')}
+            >
+              <ExternalLink className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      );
+    })}
+    ```
+
+    ### Empty State
+    When no transactions are found:
+    ```tsx
+    <div className="text-center py-8">
+      <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+      <p>No transactions found</p>
+      <p className="text-sm">Mirror Node shows recent activity for this account when available.</p>
+    </div>
+    ```
+  </Tab>
+</Tabs>
+
+## Data Fetching
+
+The component uses `MirrorNodeService` to fetch data:
+
+```typescript
+const fetchAccountData = useCallback(async () => {
+  if (!wallet.isConnected || !wallet.accountId) return;
+  setLoading(true);
+  
+  try {
+    const results = await Promise.allSettled([
+      mirrorNodeService.getAccountInfo(wallet.accountId),
+      mirrorNodeService.getAccountTokenBalancesWithInfo(wallet.accountId),
+      mirrorNodeService.getAccountTransactions(wallet.accountId, 10),
+    ]);
+
+    // Handle each result...
+  } catch (error) {
+    console.error('Error fetching account data:', error);
+  } finally {
+    setLoading(false);
+  }
+}, [wallet.isConnected, wallet.accountId]);
+```
+
+### Error Handling
+
+The component uses `Promise.allSettled()` to handle partial failures gracefully:
+
+- If account info fails, shows fallback data with connected account ID
+- If token balances fail, shows empty array
+- If transactions fail, shows empty array
+- Errors are logged to console but don't break the UI
+
+## State Management
+
+### Local State
+
+```typescript
+const [accountInfo, setAccountInfo] = useState<any>(null);
+const [tokenBalances, setTokenBalances] = useState<Array<TokenBalance & Partial<TokenInfo>>>([]);
+const [transactions, setTransactions] = useState<Transaction[]>([]);
+const [loading, setLoading] = useState(false);
+const [activeTab, setActiveTab] = useState<'overview' | 'tokens' | 'history'>('overview');
+const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+```
+
+### Context Integration
+
+Reads wallet state from context:
+
+```typescript
+const { wallet } = useWallet();
+
+// Auto-fetch when wallet changes
+useEffect(() => {
+  fetchAccountData();
+}, [fetchAccountData]);
+```
+
+## User Feedback
+
+### Toast Notifications
+
+The component shows toast messages for:
+- Account ID copied
+- Data refreshed
+- Errors
+
+```typescript
+const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+const [showToast, setShowToast] = useState(false);
+
+// Auto-hide after 2 seconds
+useEffect(() => {
+  if (!showToast) return;
+  const id = setTimeout(() => setShowToast(false), 2000);
+  return () => clearTimeout(id);
+}, [showToast]);
+```
+
+### Loading States
+
+Shows spinner while fetching:
+
+```tsx
+{loading ? (
+  <div className="text-center py-8">
+    <RefreshCw className="h-8 w-8 text-muted-foreground animate-spin mx-auto mb-4" />
+    <p>Loading account data...</p>
+  </div>
+) : (
+  // Content
+)}
+```
+
+### Empty States
+
+Shows appropriate messages when:
+- Wallet not connected
+- No tokens found
+- No transactions found
+- MetaMask connection (limited data)
+
+## Helper Functions
+
+### Timestamp Formatting
+
+```typescript
+const safeTimestampToDate = (ts: string | number | undefined) => {
+  if (!ts) return 'Unknown';
+  const t = typeof ts === 'string' && ts.includes('.') 
+    ? Math.floor(Number(ts.split('.')[0])) 
+    : Number(ts);
+  if (Number.isNaN(t) || t <= 0) return 'Unknown';
+  return new Date(t * 1000).toLocaleString();
+};
+```
+
+## Styling
+
+The component uses consistent styling:
+
+- **Cards**: `bg-muted/50 rounded-lg p-4`
+- **Tabs**: Active tab has `bg-primary/10 text-primary`
+- **Icons**: `h-4 w-4` or `h-5 w-5` with primary color for accents
+- **Responsive**: Grid layout adjusts from 1 to 2 columns on larger screens
+
+## Accessibility
+
+- Semantic HTML structure
+- ARIA labels on buttons (`aria-label="Copy account id"`)
+- Tab navigation with `aria-pressed` states
+- Icon-only buttons have descriptive labels
+- Color-coded status indicators (green for success, red for failure)

@@ -1,0 +1,577 @@
+---
+title: 'TypeScript Types'
+description: 'Complete TypeScript type reference for the Hedera DX Starter Kit'
+---
+
+## Overview
+
+This page documents all exported TypeScript interfaces and types used throughout the Hedera DX Starter Kit. These types provide full type safety for Hedera account data, tokens, transactions, and wallet interactions.
+
+## Wallet Types
+
+### WalletInfo
+
+Represents the connected wallet state.
+
+<ResponseField name="accountId" type="string" required>
+  The Hedera account ID (e.g., "0.0.12345") or EVM address (0x...)
+</ResponseField>
+
+<ResponseField name="balance" type="string" required>
+  The HBAR balance as a string
+</ResponseField>
+
+<ResponseField name="isConnected" type="boolean" required>
+  Whether a wallet is currently connected
+</ResponseField>
+
+<ResponseField name="provider" type="any" optional>
+  The wallet provider instance (WalletConnect EthereumProvider or window.ethereum)
+</ResponseField>
+
+<ResponseField name="walletType" type="'walletconnect' | 'metamask'" optional>
+  The type of wallet that is connected
+</ResponseField>
+
+#### Usage Example
+
+```typescript src/components/WalletConnect.tsx:37-43
+const walletInfo: WalletInfo = {
+  accountId: accountId,
+  balance: '0.00',
+  isConnected: true,
+  provider,
+  walletType: 'walletconnect'
+};
+```
+
+### WalletContextType
+
+The context interface provided by `WalletContext`.
+
+```typescript src/contexts/WalletContext.tsx:6-10
+interface WalletContextType {
+  wallet: WalletInfo;
+  setWallet: (wallet: WalletInfo) => void;
+  disconnectWallet: () => void;
+}
+```
+
+<ResponseField name="wallet" type="WalletInfo" required>
+  Current wallet state
+</ResponseField>
+
+<ResponseField name="setWallet" type="(wallet: WalletInfo) => void" required>
+  Function to update the wallet state
+</ResponseField>
+
+<ResponseField name="disconnectWallet" type="() => void" required>
+  Function to disconnect the wallet and clear stored data
+</ResponseField>
+
+## Mirror Node Types
+
+These types represent data returned from the Hedera Mirror Node REST API.
+
+### AccountInfo
+
+Complete account information from the Mirror Node.
+
+**Source:** `src/services/MirrorNodeService.ts:12`
+
+<ResponseField name="account" type="string" required>
+  The account ID in 0.0.X format
+</ResponseField>
+
+<ResponseField name="balance" type="object" required>
+  Current account balance
+  
+  <Expandable title="Balance object">
+    <ResponseField name="balance" type="number">
+      Balance in tinybars (1 HBAR = 100,000,000 tinybars)
+    </ResponseField>
+    
+    <ResponseField name="timestamp" type="string">
+      Timestamp of the balance snapshot
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="alias" type="string" optional>
+  Account alias if set
+</ResponseField>
+
+<ResponseField name="auto_renew_period" type="number" optional>
+  Auto-renewal period in seconds
+</ResponseField>
+
+<ResponseField name="created_timestamp" type="string" required>
+  Timestamp when the account was created
+</ResponseField>
+
+<ResponseField name="decline_reward" type="boolean" required>
+  Whether the account declines staking rewards
+</ResponseField>
+
+<ResponseField name="deleted" type="boolean" required>
+  Whether the account has been deleted
+</ResponseField>
+
+<ResponseField name="ethereum_nonce" type="number" optional>
+  The Ethereum transaction nonce
+</ResponseField>
+
+<ResponseField name="evm_address" type="string" optional>
+  The account's EVM address (without 0x prefix)
+</ResponseField>
+
+<ResponseField name="expiry_timestamp" type="string" optional>
+  When the account expires
+</ResponseField>
+
+<ResponseField name="key" type="any" optional>
+  The account's public key
+</ResponseField>
+
+<ResponseField name="max_automatic_token_associations" type="number" required>
+  Maximum number of automatic token associations allowed
+</ResponseField>
+
+<ResponseField name="memo" type="string" required>
+  Account memo
+</ResponseField>
+
+<ResponseField name="pending_reward" type="number" required>
+  Pending staking rewards in tinybars
+</ResponseField>
+
+<ResponseField name="receiver_sig_required" type="boolean" optional>
+  Whether receiver signature is required for transfers
+</ResponseField>
+
+<ResponseField name="staked_account_id" type="string" optional>
+  Account ID this account is staked to
+</ResponseField>
+
+<ResponseField name="staked_node_id" type="number" optional>
+  Node ID this account is staked to
+</ResponseField>
+
+<ResponseField name="stake_period_start" type="string" optional>
+  Start of the current staking period
+</ResponseField>
+
+#### Full Interface
+
+```typescript src/services/MirrorNodeService.ts:12-34
+export interface AccountInfo {
+  account: string;
+  balance: {
+    balance: number;
+    timestamp: string;
+  };
+  alias?: string;
+  auto_renew_period?: number;
+  created_timestamp: string;
+  decline_reward: boolean;
+  deleted: boolean;
+  ethereum_nonce?: number;
+  evm_address?: string;
+  expiry_timestamp?: string;
+  key?: any;
+  max_automatic_token_associations: number;
+  memo: string;
+  pending_reward: number;
+  receiver_sig_required?: boolean;
+  staked_account_id?: string;
+  staked_node_id?: number;
+  stake_period_start?: string;
+}
+```
+
+### TokenBalance
+
+Represents a token balance for an account.
+
+**Source:** `src/services/MirrorNodeService.ts:36`
+
+<ResponseField name="account" type="string" required>
+  The account ID that holds the token
+</ResponseField>
+
+<ResponseField name="balance" type="number" required>
+  Token balance (in smallest unit, before decimal adjustment)
+</ResponseField>
+
+<ResponseField name="decimals" type="number" optional>
+  Number of decimal places for the token
+</ResponseField>
+
+<ResponseField name="token_id" type="string" required>
+  The token ID in 0.0.X format
+</ResponseField>
+
+#### Full Interface
+
+```typescript src/services/MirrorNodeService.ts:36-41
+export interface TokenBalance {
+  account: string;
+  balance: number;
+  decimals?: number;
+  token_id: string;
+}
+```
+
+### TokenInfo
+
+Complete token metadata from the Mirror Node.
+
+**Source:** `src/services/MirrorNodeService.ts:43`
+
+<ResponseField name="token_id" type="string" required>
+  The token ID in 0.0.X format
+</ResponseField>
+
+<ResponseField name="symbol" type="string" required>
+  Token symbol (e.g., "USDC")
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Full token name
+</ResponseField>
+
+<ResponseField name="decimals" type="string" required>
+  Number of decimal places as a string
+</ResponseField>
+
+<ResponseField name="initial_supply" type="string" required>
+  Initial token supply
+</ResponseField>
+
+<ResponseField name="total_supply" type="string" required>
+  Current total supply
+</ResponseField>
+
+<ResponseField name="treasury_account_id" type="string" required>
+  Treasury account that created the token
+</ResponseField>
+
+<ResponseField name="type" type="'FUNGIBLE_COMMON' | 'NON_FUNGIBLE_UNIQUE'" required>
+  Token type - fungible or NFT
+</ResponseField>
+
+<ResponseField name="supply_type" type="'INFINITE' | 'FINITE'" required>
+  Whether supply is limited or unlimited
+</ResponseField>
+
+<ResponseField name="max_supply" type="string" optional>
+  Maximum supply (for finite supply tokens)
+</ResponseField>
+
+<ResponseField name="freeze_default" type="boolean" required>
+  Whether new accounts start frozen
+</ResponseField>
+
+<ResponseField name="freeze_key" type="any" optional>
+  Key that can freeze/unfreeze accounts
+</ResponseField>
+
+<ResponseField name="kyc_key" type="any" optional>
+  Key that can grant/revoke KYC
+</ResponseField>
+
+<ResponseField name="pause_key" type="any" optional>
+  Key that can pause/unpause the token
+</ResponseField>
+
+<ResponseField name="supply_key" type="any" optional>
+  Key that can mint/burn tokens
+</ResponseField>
+
+<ResponseField name="wipe_key" type="any" optional>
+  Key that can wipe token balances
+</ResponseField>
+
+<ResponseField name="fee_schedule_key" type="any" optional>
+  Key that can update custom fees
+</ResponseField>
+
+<ResponseField name="custom_fees" type="any" optional>
+  Custom fee schedule
+</ResponseField>
+
+<ResponseField name="created_timestamp" type="string" required>
+  When the token was created
+</ResponseField>
+
+<ResponseField name="modified_timestamp" type="string" required>
+  Last modification timestamp
+</ResponseField>
+
+#### Full Interface
+
+```typescript src/services/MirrorNodeService.ts:43-64
+export interface TokenInfo {
+  token_id: string;
+  symbol: string;
+  name: string;
+  decimals: string;
+  initial_supply: string;
+  total_supply: string;
+  treasury_account_id: string;
+  type: 'FUNGIBLE_COMMON' | 'NON_FUNGIBLE_UNIQUE';
+  supply_type: 'INFINITE' | 'FINITE';
+  max_supply?: string;
+  freeze_default: boolean;
+  freeze_key?: any;
+  kyc_key?: any;
+  pause_key?: any;
+  supply_key?: any;
+  wipe_key?: any;
+  fee_schedule_key?: any;
+  custom_fees?: any;
+  created_timestamp: string;
+  modified_timestamp: string;
+}
+```
+
+### Transaction
+
+Represents a transaction from the Mirror Node.
+
+**Source:** `src/services/MirrorNodeService.ts:66`
+
+<ResponseField name="bytes" type="string" optional>
+  Transaction bytes
+</ResponseField>
+
+<ResponseField name="charged_tx_fee" type="number" required>
+  Fee charged in tinybars
+</ResponseField>
+
+<ResponseField name="consensus_timestamp" type="string" required>
+  When consensus was reached
+</ResponseField>
+
+<ResponseField name="entity_id" type="string" optional>
+  The entity (account/token) affected
+</ResponseField>
+
+<ResponseField name="max_fee" type="string" required>
+  Maximum fee allowed
+</ResponseField>
+
+<ResponseField name="memo_base64" type="string" optional>
+  Transaction memo in base64
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Transaction type name (e.g., "CRYPTOTRANSFER")
+</ResponseField>
+
+<ResponseField name="nft_transfers" type="any[]" optional>
+  NFT transfers in this transaction
+</ResponseField>
+
+<ResponseField name="node" type="string" required>
+  Node that processed the transaction
+</ResponseField>
+
+<ResponseField name="nonce" type="number" required>
+  Transaction nonce
+</ResponseField>
+
+<ResponseField name="parent_consensus_timestamp" type="string" optional>
+  Parent transaction timestamp (for child transactions)
+</ResponseField>
+
+<ResponseField name="result" type="string" required>
+  Transaction result status (e.g., "SUCCESS")
+</ResponseField>
+
+<ResponseField name="scheduled" type="boolean" required>
+  Whether this is a scheduled transaction
+</ResponseField>
+
+<ResponseField name="staking_reward_transfers" type="any[]" optional>
+  Staking reward transfers
+</ResponseField>
+
+<ResponseField name="token_transfers" type="any[]" optional>
+  Token transfers in this transaction
+</ResponseField>
+
+<ResponseField name="transaction_hash" type="string" required>
+  Transaction hash
+</ResponseField>
+
+<ResponseField name="transaction_id" type="string" required>
+  Unique transaction ID
+</ResponseField>
+
+<ResponseField name="transfers" type="Array<Transfer>" required>
+  HBAR transfers
+  
+  <Expandable title="Transfer object">
+    <ResponseField name="account" type="string">
+      Account ID
+    </ResponseField>
+    
+    <ResponseField name="amount" type="number">
+      Amount in tinybars (negative for debits, positive for credits)
+    </ResponseField>
+    
+    <ResponseField name="is_approval" type="boolean" optional>
+      Whether this is an approved transfer
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="valid_duration_seconds" type="string" required>
+  How long the transaction is valid
+</ResponseField>
+
+<ResponseField name="valid_start_timestamp" type="string" required>
+  When the transaction becomes valid
+</ResponseField>
+
+#### Full Interface
+
+```typescript src/services/MirrorNodeService.ts:66-91
+export interface Transaction {
+  bytes?: string;
+  charged_tx_fee: number;
+  consensus_timestamp: string;
+  entity_id?: string;
+  max_fee: string;
+  memo_base64?: string;
+  name: string;
+  nft_transfers?: any[];
+  node: string;
+  nonce: number;
+  parent_consensus_timestamp?: string;
+  result: string;
+  scheduled: boolean;
+  staking_reward_transfers?: any[];
+  token_transfers?: any[];
+  transaction_hash: string;
+  transaction_id: string;
+  transfers: Array<{
+    account: string;
+    amount: number;
+    is_approval?: boolean;
+  }>;
+  valid_duration_seconds: string;
+  valid_start_timestamp: string;
+}
+```
+
+## Transaction Types
+
+### TransactionResult
+
+Result of a transaction execution.
+
+**Source:** `src/services/HederaService.ts:15`
+
+<ResponseField name="success" type="boolean" required>
+  Whether the transaction succeeded
+</ResponseField>
+
+<ResponseField name="transactionId" type="string" optional>
+  The transaction ID if successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Human-readable result message
+</ResponseField>
+
+<ResponseField name="receipt" type="any" optional>
+  Transaction receipt from the network
+</ResponseField>
+
+#### Full Interface
+
+```typescript src/services/HederaService.ts:15-20
+export interface TransactionResult {
+  success: boolean;
+  transactionId?: string;
+  message: string;
+  receipt?: any;
+}
+```
+
+### WalletProvider
+
+Interface for wallet provider implementations.
+
+**Source:** `src/services/HederaService.ts:22`
+
+<ResponseField name="getAccountId" type="() => string" required>
+  Returns the connected account ID
+</ResponseField>
+
+<ResponseField name="request" type="(method: string, params: any) => Promise<any>" required>
+  Sends a request to the wallet provider
+</ResponseField>
+
+#### Full Interface
+
+```typescript src/services/HederaService.ts:22-25
+export interface WalletProvider {
+  getAccountId: () => string;
+  request: (method: string, params: any) => Promise<any>;
+}
+```
+
+## Usage Examples
+
+### Type-safe Account Data Fetching
+
+```typescript src/components/AccountDetails.tsx:36-40
+const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
+const [tokenBalances, setTokenBalances] = useState<Array<TokenBalance & Partial<TokenInfo>>>([]);
+const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+const results = await Promise.allSettled([
+  mirrorNodeService.getAccountInfo(wallet.accountId),
+  mirrorNodeService.getAccountTokenBalancesWithInfo(wallet.accountId),
+  mirrorNodeService.getAccountTransactions(wallet.accountId, 10),
+]);
+```
+
+### Accessing Nested Types
+
+```typescript
+const accountInfo: AccountInfo = await mirrorNodeService.getAccountInfo('0.0.12345');
+
+// Access balance
+const balanceInTinybars: number = accountInfo.balance.balance;
+const balanceInHbar = balanceInTinybars / 100_000_000;
+
+// Access optional fields safely
+const evmAddress: string | undefined = accountInfo.evm_address;
+if (evmAddress) {
+  console.log(`EVM Address: 0x${evmAddress}`);
+}
+```
+
+### Type Guards
+
+```typescript
+function isConnected(wallet: WalletInfo): wallet is WalletInfo & { isConnected: true } {
+  return wallet.isConnected === true;
+}
+
+if (isConnected(wallet)) {
+  // TypeScript knows wallet.isConnected is true here
+  console.log(wallet.accountId);
+}
+```
+
+## Related
+
+- [WalletContext](/api/wallet-context) - Wallet state management
+- [useWallet hook](/api/use-wallet) - Hook to access wallet context
+- [MirrorNodeService](/api/mirror-node-service) - Mirror Node API client
+- [HederaService](/api/hedera-service) - Hedera SDK wrapper

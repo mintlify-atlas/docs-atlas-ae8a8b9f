@@ -1,80 +1,183 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Get started with Hedera DX Starter Kit in under 5 minutes"
 ---
 
-## Get started in three steps
+Build your first Hedera dApp with modern React, TypeScript, and Mirror Node integration.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, ensure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+- **Node.js 18+** installed on your system
+- **MetaMask** or **HashPack** wallet extension (ECDSA account recommended for HashPack)
+- Basic familiarity with React and TypeScript
 
-### Step 2: Deploy your changes
+## Installation
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/your-org/hedera-dx-starter.git
+    cd hedera-dx-starter/frontend
+    ```
+  </Step>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+  </Step>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+  <Step title="Configure environment (optional)">
+    Create a `.env.local` file in the frontend directory:
 
-### Step 3: Go live
+    ```env
+    NEXT_PUBLIC_NETWORK=testnet
+    NEXT_PUBLIC_MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
+    ```
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+    <Note>
+      These are the default values. You only need to create this file if you want to customize the network or Mirror Node URL.
+    </Note>
+  </Step>
 
-## Next steps
+  <Step title="Start the development server">
+    ```bash
+    npm run dev
+    ```
 
-Now that you have your docs running, explore these key features:
+    Open [http://localhost:3000](http://localhost:3000) in your browser.
+  </Step>
+</Steps>
+
+## Connect Your Wallet
+
+The starter kit supports MetaMask and HashPack via WalletConnect. Here's how to connect:
+
+```tsx
+import { useWallet } from '@/contexts/WalletContext';
+
+export function MyComponent() {
+  const { wallet, setWallet } = useWallet();
+
+  const handleConnect = async () => {
+    // For MetaMask
+    const accounts = await window.ethereum.request({
+      method: 'eth_requestAccounts',
+    });
+
+    setWallet({
+      accountId: accounts[0],
+      balance: '0.00',
+      isConnected: true,
+      provider: window.ethereum,
+      walletType: 'metamask'
+    });
+  };
+
+  return wallet.isConnected ? (
+    <p>Connected: {wallet.accountId}</p>
+  ) : (
+    <button onClick={handleConnect}>Connect Wallet</button>
+  );
+}
+```
+
+## Fetch Account Data
+
+Once connected, use the Mirror Node service to fetch account information:
+
+```tsx
+import { MirrorNodeService } from '@/services/MirrorNodeService';
+
+// Get the singleton instance
+const mirror = MirrorNodeService.getInstance();
+
+// Fetch account info
+const accountInfo = await mirror.getAccountInfo('0.0.1234');
+console.log(`Balance: ${mirror.formatHbar(accountInfo.balance.balance)} HBAR`);
+
+// Fetch token balances with metadata
+const tokens = await mirror.getAccountTokenBalancesWithInfo('0.0.1234');
+tokens.forEach(token => {
+  console.log(`${token.symbol}: ${mirror.formatTokenAmount(token.balance, token.decimals)}`);
+});
+
+// Fetch recent transactions
+const transactions = await mirror.getAccountTransactions('0.0.1234', 10);
+transactions.forEach(tx => {
+  console.log(`${tx.name} - ${tx.result}`);
+});
+```
+
+<Tip>
+  The Mirror Node service automatically handles EVM addresses (0x...) and converts them to Hedera account IDs (0.0.xxxxx).
+</Tip>
+
+## What You Built
+
+Your starter kit includes:
+
+- **Wallet Detection**: Automatically detects and connects MetaMask or HashPack wallets
+- **Mirror Node Integration**: Reads account info, token balances, and transaction history
+- **Interactive Tutorial**: Step-by-step guide at `/tutorial`
+- **API Playground**: Test raw Mirror Node endpoints from the UI
+
+## Next Steps
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Mirror Node Basics" icon="database" href="/concepts/mirror-node">
+    Learn how Mirror Node REST API works and what data you can query
+  </Card>
+  <Card title="Wallet Integration" icon="wallet" href="/concepts/wallet-integration">
+    Deep dive into connecting wallets and handling account detection
+  </Card>
+  <Card title="WalletConnect Component" icon="plug" href="/components/wallet-connect">
+    Explore the full WalletConnect component implementation
+  </Card>
+  <Card title="Mirror Node Service" icon="code" href="/api/mirror-node-service">
+    Complete API reference for the MirrorNodeService
+  </Card>
 </CardGroup>
 
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="MetaMask not connecting">
+    Ensure MetaMask is installed and the Hedera Testnet network is added. The starter kit automatically prompts to add the network on first connection.
+
+    If issues persist, manually add the network:
+    - **Network Name**: Hedera Testnet
+    - **RPC URL**: `https://testnet.hashio.io/api`
+    - **Chain ID**: 296 (0x128)
+    - **Currency Symbol**: HBAR
+  </Accordion>
+
+  <Accordion title="HashPack connection failing">
+    Make sure you're using an **ECDSA account** in HashPack, not an ED25519 account. WalletConnect requires ECDSA for compatibility.
+
+    To create an ECDSA account in HashPack:
+    1. Open HashPack extension
+    2. Go to Settings → Accounts
+    3. Create new account with ECDSA key type
+  </Accordion>
+
+  <Accordion title="Mirror Node API errors">
+    If you see 404 errors when fetching account data:
+    - Verify the account exists on testnet using [HashScan](https://hashscan.io/testnet)
+    - Ensure you're using the correct account ID format (0.0.xxxxx)
+    - Check that `NEXT_PUBLIC_MIRROR_NODE_URL` points to the correct network
+  </Accordion>
+
+  <Accordion title="Build or runtime errors">
+    Common fixes:
+    - Clear Next.js cache: `rm -rf .next`
+    - Reinstall dependencies: `rm -rf node_modules package-lock.json && npm install`
+    - Ensure Node.js version is 18 or higher: `node --version`
+  </Accordion>
+</AccordionGroup>
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Need more help? Check the [GitHub Issues](https://github.com/your-org/hedera-dx-starter/issues) or start a discussion.
 </Note>

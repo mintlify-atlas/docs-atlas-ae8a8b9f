@@ -1,0 +1,465 @@
+---
+title: "HederaService"
+description: "Complete API reference for HederaService singleton"
+---
+
+The `HederaService` is a singleton class that provides transaction preparation functionality for Hedera operations. It uses the Hedera JavaScript SDK to create transaction objects that can be signed and executed by wallet providers.
+
+## Singleton Pattern
+
+### getInstance()
+
+Get the singleton instance of HederaService.
+
+```typescript
+static getInstance(): HederaService
+```
+
+<ResponseField name="instance" type="HederaService">
+  The singleton instance of HederaService
+</ResponseField>
+
+**Example:**
+
+```typescript
+import { HederaService } from '@/services/HederaService';
+
+const hederaService = HederaService.getInstance();
+```
+
+## Properties
+
+### client
+
+The Hedera SDK client instance configured for the network.
+
+```typescript
+public client: Client
+```
+
+<ResponseField name="client" type="Client">
+  Hedera SDK Client instance (configured for testnet by default)
+</ResponseField>
+
+**Example:**
+
+```typescript
+const service = HederaService.getInstance();
+const client = service.client;
+```
+
+## Transaction Methods
+
+### sendHbar()
+
+Prepare an HBAR transfer transaction.
+
+```typescript
+async sendHbar(
+  fromAccountId: string,
+  toAccountId: string,
+  amount: number
+): Promise<string[]>
+```
+
+<ParamField path="fromAccountId" type="string" required>
+  Sender's Hedera account ID (e.g., "0.0.12345")
+</ParamField>
+
+<ParamField path="toAccountId" type="string" required>
+  Recipient's Hedera account ID (e.g., "0.0.67890")
+</ParamField>
+
+<ParamField path="amount" type="number" required>
+  Amount of HBAR to transfer (in HBAR, not tinybars)
+</ParamField>
+
+<ResponseField name="response" type="string[]">
+  Array containing a single base64-encoded transaction ready for signing
+</ResponseField>
+
+**Example:**
+
+```typescript
+const service = HederaService.getInstance();
+
+// Prepare transaction to send 5 HBAR
+const txList = await service.sendHbar(
+  '0.0.12345',  // from
+  '0.0.67890',  // to
+  5             // 5 HBAR
+);
+
+// txList is now ready to be sent to wallet for signing
+const signedTx = await wallet.request({
+  method: 'signAndExecuteTransaction',
+  params: { transactionList: txList }
+});
+```
+
+### createToken()
+
+Prepare a fungible token creation transaction.
+
+```typescript
+async createToken(
+  accountId: string,
+  name: string,
+  symbol: string,
+  initialSupply: number,
+  decimals: number
+): Promise<string[]>
+```
+
+<ParamField path="accountId" type="string" required>
+  Treasury account ID that will own and receive the initial supply
+</ParamField>
+
+<ParamField path="name" type="string" required>
+  Full token name (e.g., "My Token")
+</ParamField>
+
+<ParamField path="symbol" type="string" required>
+  Token symbol (e.g., "MTK")
+</ParamField>
+
+<ParamField path="initialSupply" type="number" required>
+  Initial supply in smallest units (considering decimals)
+</ParamField>
+
+<ParamField path="decimals" type="number" required>
+  Number of decimal places (e.g., 6 for USDC-like tokens)
+</ParamField>
+
+<ResponseField name="response" type="string[]">
+  Array containing a single base64-encoded token creation transaction
+</ResponseField>
+
+**Example:**
+
+```typescript
+const service = HederaService.getInstance();
+
+// Create a token with 1,000,000 initial supply and 2 decimals
+const txList = await service.createToken(
+  '0.0.12345',     // treasury account
+  'My Token',      // token name
+  'MTK',           // symbol
+  100000000,       // 1,000,000.00 (with 2 decimals)
+  2                // decimals
+);
+
+// Send to wallet for signing
+const result = await wallet.request({
+  method: 'signAndExecuteTransaction',
+  params: { transactionList: txList }
+});
+```
+
+**Token Configuration:**
+
+- **Type:** `TokenType.FungibleCommon` (standard fungible token)
+- **Supply Type:** `TokenSupplyType.Infinite` (no maximum supply cap)
+- **Treasury Account:** Specified `accountId` receives initial supply
+
+### getAccountBalance()
+
+Retrieve the HBAR balance for a specific account.
+
+```typescript
+async getAccountBalance(accountId: string): Promise<string>
+```
+
+<ParamField path="accountId" type="string" required>
+  Hedera account ID (e.g., "0.0.12345")
+</ParamField>
+
+<ResponseField name="response" type="string">
+  Account balance as a string (e.g., "100.50 ℏ"). Returns "0" if account not found.
+</ResponseField>
+
+**Example:**
+
+```typescript
+const service = HederaService.getInstance();
+const balance = await service.getAccountBalance('0.0.12345');
+console.log(`Account balance: ${balance}`);
+// Output: "Account balance: 100.50 ℏ"
+```
+
+## Lifecycle Methods
+
+### close()
+
+Close the Hedera client connection and release resources.
+
+```typescript
+close(): void
+```
+
+**Example:**
+
+```typescript
+const service = HederaService.getInstance();
+
+// Use the service...
+
+// Clean up when done (usually on app shutdown)
+service.close();
+```
+
+<Tip>
+  You typically don't need to call `close()` in Next.js applications since the service is used throughout the app lifecycle. Only call this during application shutdown.
+</Tip>
+
+## Transaction Preparation Workflow
+
+The HederaService uses a private method `prepareTransactionList()` to standardize transaction preparation:
+
+```typescript
+private async prepareTransactionList(
+  transaction: Transaction,
+  signerAccountId: string
+): Promise<string[]>
+```
+
+### Workflow Steps:
+
+1. **Set Node Account IDs:** Configures transaction to use node `0.0.3`
+2. **Generate Transaction ID:** Creates unique transaction ID from signer account
+3. **Freeze Transaction:** Finalizes transaction with client configuration
+4. **Serialize:** Converts transaction to bytes
+5. **Encode:** Base64-encodes bytes for wallet transmission
+
+**Example Transaction Flow:**
+
+```typescript
+// 1. User initiates action
+const txList = await hederaService.sendHbar('0.0.12345', '0.0.67890', 5);
+
+// 2. Transaction list contains base64-encoded transaction
+// txList = ["AQIDBAUGBwg...base64..."]
+
+// 3. Send to wallet provider for signing
+const response = await walletProvider.request({
+  method: 'signAndExecuteTransaction',
+  params: { transactionList: txList }
+});
+
+// 4. Wallet signs and executes on Hedera network
+const transactionId = response.transactionId;
+```
+
+## TypeScript Interfaces
+
+### TransactionResult
+
+```typescript
+interface TransactionResult {
+  success: boolean;
+  transactionId?: string;
+  message: string;
+  receipt?: any;
+}
+```
+
+<ResponseField name="success" type="boolean">
+  Whether the transaction was successful
+</ResponseField>
+
+<ResponseField name="transactionId" type="string">
+  Transaction ID if successful (e.g., "0.0.12345@1234567890.123456789")
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable status or error message
+</ResponseField>
+
+<ResponseField name="receipt" type="any">
+  Optional transaction receipt with additional details
+</ResponseField>
+
+### WalletProvider
+
+```typescript
+interface WalletProvider {
+  getAccountId: () => string;
+  request: (method: string, params: any) => Promise<any>;
+}
+```
+
+<ResponseField name="getAccountId" type="() => string">
+  Function to retrieve the connected wallet's account ID
+</ResponseField>
+
+<ResponseField name="request" type="(method: string, params: any) => Promise<any>">
+  Method to send requests to the wallet provider
+</ResponseField>
+
+**Supported Wallet Methods:**
+
+- `signAndExecuteTransaction` - Sign and execute a transaction
+- `signTransaction` - Sign transaction without executing
+
+## Integration with Wallet Providers
+
+HederaService prepares transactions in a format compatible with Hedera wallet extensions like HashPack, Blade, and Kabila.
+
+### Example: Complete Transfer Flow
+
+```typescript
+import { HederaService } from '@/services/HederaService';
+import { useWallet } from '@/contexts/WalletContext';
+
+function TransferComponent() {
+  const { walletProvider } = useWallet();
+  const hederaService = HederaService.getInstance();
+
+  async function sendTransfer() {
+    try {
+      // Get sender account from wallet
+      const fromAccount = walletProvider.getAccountId();
+      
+      // Prepare transaction
+      const txList = await hederaService.sendHbar(
+        fromAccount,
+        '0.0.67890',
+        10 // 10 HBAR
+      );
+      
+      // Request wallet to sign and execute
+      const response = await walletProvider.request({
+        method: 'signAndExecuteTransaction',
+        params: { transactionList: txList }
+      });
+      
+      console.log('Transfer successful:', response.transactionId);
+    } catch (error) {
+      console.error('Transfer failed:', error);
+    }
+  }
+
+  return (
+    <button onClick={sendTransfer}>Send 10 HBAR</button>
+  );
+}
+```
+
+### Example: Token Creation Flow
+
+```typescript
+import { HederaService } from '@/services/HederaService';
+import { useWallet } from '@/contexts/WalletContext';
+
+function CreateTokenComponent() {
+  const { walletProvider } = useWallet();
+  const hederaService = HederaService.getInstance();
+
+  async function createMyToken() {
+    try {
+      const treasuryAccount = walletProvider.getAccountId();
+      
+      // Prepare token creation transaction
+      const txList = await hederaService.createToken(
+        treasuryAccount,
+        'My Custom Token',
+        'MCT',
+        1000000,  // 1 million tokens
+        0         // no decimals
+      );
+      
+      // Execute transaction
+      const response = await walletProvider.request({
+        method: 'signAndExecuteTransaction',
+        params: { transactionList: txList }
+      });
+      
+      console.log('Token created:', response.receipt.tokenId);
+    } catch (error) {
+      console.error('Token creation failed:', error);
+    }
+  }
+
+  return (
+    <button onClick={createMyToken}>Create Token</button>
+  );
+}
+```
+
+## Network Configuration
+
+By default, HederaService connects to **Hedera Testnet**. The network is configured during initialization:
+
+```typescript
+private constructor() {
+  this.client = Client.forTestnet();
+}
+```
+
+<Note>
+  For mainnet deployments, you would need to modify the constructor to use `Client.forMainnet()` or make the network configurable via environment variables.
+</Note>
+
+## Error Handling
+
+All async methods can throw errors. Always wrap calls in try-catch blocks:
+
+```typescript
+try {
+  const txList = await hederaService.sendHbar('0.0.12345', '0.0.67890', 5);
+  const result = await walletProvider.request({
+    method: 'signAndExecuteTransaction',
+    params: { transactionList: txList }
+  });
+} catch (error) {
+  if (error.message.includes('INSUFFICIENT_ACCOUNT_BALANCE')) {
+    console.error('Not enough HBAR in account');
+  } else if (error.message.includes('USER_REJECT')) {
+    console.error('User rejected transaction');
+  } else {
+    console.error('Transaction failed:', error);
+  }
+}
+```
+
+## Common Use Cases
+
+### Sending HBAR
+
+```typescript
+const txList = await hederaService.sendHbar(
+  walletProvider.getAccountId(),
+  recipientId,
+  amount
+);
+```
+
+### Creating Tokens
+
+```typescript
+const txList = await hederaService.createToken(
+  walletProvider.getAccountId(),
+  tokenName,
+  tokenSymbol,
+  initialSupply,
+  decimals
+);
+```
+
+### Checking Balance Before Transfer
+
+```typescript
+const balance = await hederaService.getAccountBalance(accountId);
+const hbarAmount = parseFloat(balance.replace(' ℏ', ''));
+
+if (hbarAmount >= amountToSend) {
+  const txList = await hederaService.sendHbar(accountId, recipient, amountToSend);
+  // Proceed with transaction...
+} else {
+  console.error('Insufficient balance');
+}
+```
+
+## Source Location
+
+`src/services/HederaService.ts:27-103`

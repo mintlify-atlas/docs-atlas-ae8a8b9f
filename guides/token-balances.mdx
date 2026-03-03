@@ -1,0 +1,323 @@
+---
+title: 'Display token balances'
+description: 'Retrieve and display HTS token balances with metadata'
+---
+
+Hedera Token Service (HTS) allows accounts to hold fungible and non-fungible tokens. This guide shows you how to retrieve and display token balances with full metadata.
+
+## Understanding token association
+
+On Hedera, accounts must be explicitly associated with tokens before they can hold them. This is different from Ethereum where any address can receive any token.
+
+<Note>
+  Token association is a protective feature that prevents spam tokens and gives users control over which tokens their account can hold.
+</Note>
+
+## Implementation
+
+<Steps>
+  <Step title="Define TypeScript interfaces">
+    Create interfaces for token balances and metadata:
+
+    ```typescript src/services/MirrorNodeService.ts
+    export interface TokenBalance {
+      account: string;
+      balance: number;
+      decimals?: number;
+      token_id: string;
+    }
+
+    export interface TokenInfo {
+      token_id: string;
+      symbol: string;
+      name: string;
+      decimals: string;
+      initial_supply: string;
+      total_supply: string;
+      treasury_account_id: string;
+      type: 'FUNGIBLE_COMMON' | 'NON_FUNGIBLE_UNIQUE';
+      supply_type: 'INFINITE' | 'FINITE';
+      max_supply?: string;
+      freeze_default: boolean;
+      freeze_key?: any;
+      kyc_key?: any;
+      pause_key?: any;
+      supply_key?: any;
+      wipe_key?: any;
+      fee_schedule_key?: any;
+      custom_fees?: any;
+      created_timestamp: string;
+      modified_timestamp: string;
+    }
+    ```
+  </Step>
+
+  <Step title="Fetch token balances">
+    Implement a method to retrieve all token balances for an account:
+
+    ```typescript src/services/MirrorNodeService.ts
+    /**
+     * Get token balances for an account
+     */
+    async getAccountTokenBalances(accountId: string): Promise<TokenBalance[]> {
+      try {
+        const normalizedId = this.normalizeAccountId(accountId);
+        
+        // If we have an EVM address, we need to first get the account ID
+        let targetAccountId = normalizedId;
+        if (normalizedId.startsWith('0x')) {
+          try {
+            const accountInfo = await this.getAccountInfo(normalizedId);
+            targetAccountId = accountInfo.account;
+          } catch (error) {
+            console.warn('Could not resolve EVM address to account ID:', error);
+            return [];
+          }
+        }
+        
+        const response = await fetch(
+          `${this.baseUrl}/api/v1/accounts/${targetAccountId}/tokens?limit=100`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch token balances: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data.tokens || [];
+      } catch (error) {
+        console.error('Error fetching token balances:', error);
+        throw error;
+      }
+    }
+    ```
+
+    <Tip>
+      The API supports pagination with the `limit` parameter. For accounts with many tokens, you may need to implement pagination using the `next` link from the response.
+    </Tip>
+  </Step>
+
+  <Step title="Fetch token metadata">
+    Get detailed information about each token:
+
+    ```typescript src/services/MirrorNodeService.ts
+    /**
+     * Get token information
+     */
+    async getTokenInfo(tokenId: string): Promise<TokenInfo> {
+      try {
+        const response = await fetch(`${this.baseUrl}/api/v1/tokens/${tokenId}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch token info: ${response.statusText}`);
+        }
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error('Error fetching token info:', error);
+        throw error;
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Combine balances with metadata">
+    Create a method that fetches token balances and enriches them with metadata:
+
+    ```typescript src/services/MirrorNodeService.ts
+    /**
+     * Get detailed token balances with token info
+     */
+    async getAccountTokenBalancesWithInfo(
+      accountId: string
+    ): Promise<Array<TokenBalance & Partial<TokenInfo>>> {
+      try {
+        const tokenBalances = await this.getAccountTokenBalances(accountId);
+        
+        const balancesWithInfo = await Promise.allSettled(
+          tokenBalances.map(async (balance) => {
+            try {
+              const tokenInfo = await this.getTokenInfo(balance.token_id);
+              return {
+                ...balance,
+                ...tokenInfo,
+                decimals: parseInt(tokenInfo.decimals) || 0,
+              };
+            } catch (error) {
+              console.warn(`Failed to fetch info for token ${balance.token_id}:`, error);
+              return balance;
+            }
+          })
+        );
+
+        return balancesWithInfo
+          .filter((result): result is PromiseFulfilledResult<TokenBalance & Partial<TokenInfo>> => 
+            result.status === 'fulfilled'
+          )
+          .map(result => result.value);
+      } catch (error) {
+        console.error('Error fetching token balances with info:', error);
+        throw error;
+      }
+    }
+    ```
+
+    <Note>
+      Using `Promise.allSettled` ensures that if one token fails to load, the others still display. This is important for robustness.
+    </Note>
+  </Step>
+
+  <Step title="Format token amounts with decimals">
+    Add a utility method to properly format token amounts:
+
+    ```typescript src/services/MirrorNodeService.ts
+    /**
+     * Format token amount with decimals
+     */
+    formatTokenAmount(amount: number, decimals: number = 0): string {
+      const divisor = Math.pow(10, decimals);
+      return (amount / divisor).toLocaleString();
+    }
+    ```
+
+    For example:
+    - Raw amount: `1000000`
+    - Decimals: `6`
+    - Formatted: `1` (1,000,000 / 10^6)
+  </Step>
+
+  <Step title="Display token balances">
+    Use the service in your component:
+
+    ```typescript src/components/AccountDetails.tsx
+    const [tokenBalances, setTokenBalances] = useState<Array<TokenBalance & Partial<TokenInfo>>>([]);
+    const mirrorNodeService = MirrorNodeService.getInstance();
+
+    const fetchAccountData = useCallback(async () => {
+      if (!wallet.isConnected || !wallet.accountId) return;
+      setLoading(true);
+      try {
+        const results = await Promise.allSettled([
+          mirrorNodeService.getAccountTokenBalancesWithInfo(wallet.accountId),
+        ]);
+
+        if (results[0].status === 'fulfilled') {
+          setTokenBalances(Array.isArray(results[0].value) ? results[0].value : []);
+        }
+      } catch (error) {
+        console.error('Error fetching account data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }, [wallet.isConnected, wallet.accountId, mirrorNodeService]);
+
+    return (
+      <div className="space-y-4">
+        {tokenBalances.length > 0 ? (
+          tokenBalances.map((token) => (
+            <div key={token.token_id} className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
+              <div className="flex-1">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-full">
+                    <Coins className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <h4 className="font-medium text-foreground">{token.name || 'Unknown Token'}</h4>
+                    <p className="text-sm text-muted-foreground">{token.symbol || 'N/A'} • ID: {token.token_id}</p>
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="font-medium text-foreground">
+                  {mirrorNodeService.formatTokenAmount(token.balance, token.decimals)}
+                </p>
+                <p className="text-xs text-muted-foreground">{token.decimals ?? 0} decimals</p>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="text-center py-8">
+            <Coins className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">No tokens found</p>
+          </div>
+        )}
+      </div>
+    );
+    ```
+  </Step>
+</Steps>
+
+## Check token association
+
+You can check if an account is associated with a specific token:
+
+```typescript src/services/MirrorNodeService.ts
+/**
+ * Check if account is associated with token
+ */
+async isTokenAssociated(accountId: string, tokenId: string): Promise<boolean> {
+  try {
+    const tokenBalances = await this.getAccountTokenBalances(accountId);
+    return tokenBalances.some(balance => balance.token_id === tokenId);
+  } catch (error) {
+    console.error('Error checking token association:', error);
+    return false;
+  }
+}
+```
+
+Use this before attempting token transfers:
+
+```typescript
+const isAssociated = await mirrorNodeService.isTokenAssociated(
+  '0.0.1234567',
+  '0.0.7654321'
+);
+
+if (!isAssociated) {
+  console.log('Account must associate with token first');
+}
+```
+
+## Token types
+
+Hedera supports two main token types:
+
+### Fungible tokens
+
+```json
+{
+  "token_id": "0.0.1234567",
+  "name": "My Token",
+  "symbol": "MTK",
+  "decimals": "6",
+  "type": "FUNGIBLE_COMMON",
+  "total_supply": "1000000000000",
+  "supply_type": "FINITE",
+  "max_supply": "10000000000000"
+}
+```
+
+### Non-fungible tokens (NFTs)
+
+```json
+{
+  "token_id": "0.0.7654321",
+  "name": "My NFT Collection",
+  "symbol": "MNFT",
+  "decimals": "0",
+  "type": "NON_FUNGIBLE_UNIQUE",
+  "total_supply": "100",
+  "supply_type": "FINITE",
+  "max_supply": "1000"
+}
+```
+
+<Warning>
+  NFTs always have 0 decimals. The balance represents the number of NFTs held, not a divisible amount.
+</Warning>
+
+## Next steps
+
+- [View transaction history](/guides/transaction-history) to see token transfers
+- Learn about [creating custom tokens](https://docs.hedera.com/hedera/sdks-and-apis/sdks/token-service) with the Hedera SDK
+- Explore [custom fees](https://docs.hedera.com/hedera/sdks-and-apis/sdks/token-service/custom-token-fees) for tokens

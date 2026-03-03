@@ -1,0 +1,292 @@
+---
+title: 'Fetch account data'
+description: 'Learn how to retrieve account information from Mirror Node'
+---
+
+The Hedera Mirror Node REST API provides comprehensive account information. This guide shows you how to fetch and display account data in your dApp.
+
+## Overview
+
+The Mirror Node Service provides methods to query account information, including:
+
+- Account balance and metadata
+- Creation timestamp and EVM address
+- Token associations and staking information
+- Account configuration (auto-renewal, memo, etc.)
+
+## Implementation
+
+<Steps>
+  <Step title="Set up the Mirror Node Service">
+    Create a singleton service to interact with the Hedera Mirror Node API:
+
+    ```typescript src/services/MirrorNodeService.ts
+    const DEFAULT_MIRROR_NODE_URL = 'https://testnet.mirrornode.hedera.com';
+    const MIRROR_NODE_URL =
+      (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_MIRROR_NODE_URL) ||
+      DEFAULT_MIRROR_NODE_URL;
+
+    export class MirrorNodeService {
+      private static instance: MirrorNodeService;
+      private baseUrl: string;
+
+      private constructor() {
+        this.baseUrl = MIRROR_NODE_URL;
+      }
+
+      public static getInstance(): MirrorNodeService {
+        if (!MirrorNodeService.instance) {
+          MirrorNodeService.instance = new MirrorNodeService();
+        }
+        return MirrorNodeService.instance;
+      }
+    }
+    ```
+
+    <Tip>
+      Using the singleton pattern ensures you only create one instance of the service, making it efficient and easy to use across your app.
+    </Tip>
+  </Step>
+
+  <Step title="Define TypeScript interfaces">
+    Create type-safe interfaces for the Mirror Node API responses:
+
+    ```typescript src/services/MirrorNodeService.ts
+    export interface AccountInfo {
+      account: string;
+      balance: {
+        balance: number;
+        timestamp: string;
+      };
+      alias?: string;
+      auto_renew_period?: number;
+      created_timestamp: string;
+      decline_reward: boolean;
+      deleted: boolean;
+      ethereum_nonce?: number;
+      evm_address?: string;
+      expiry_timestamp?: string;
+      key?: any;
+      max_automatic_token_associations: number;
+      memo: string;
+      pending_reward: number;
+      receiver_sig_required?: boolean;
+      staked_account_id?: string;
+      staked_node_id?: number;
+      stake_period_start?: string;
+    }
+    ```
+
+    This interface matches the Mirror Node API response structure, providing full type safety.
+  </Step>
+
+  <Step title="Implement account info fetching">
+    Add the `getAccountInfo` method to retrieve account data:
+
+    ```typescript src/services/MirrorNodeService.ts
+    /**
+     * Convert EVM address to Hedera account ID or return as-is if already account ID
+     */
+    private normalizeAccountId(accountId: string): string {
+      // If it's already a Hedera account ID (0.0.xxxxx), return as-is
+      if (accountId.match(/^0\.0\.[0-9]+$/)) {
+        return accountId;
+      }
+      
+      // If it's an EVM address (0x...), we need to query by EVM address
+      if (accountId.startsWith('0x')) {
+        return accountId;
+      }
+      
+      return accountId;
+    }
+
+    /**
+     * Get account information from Mirror Node
+     */
+    async getAccountInfo(accountId: string): Promise<AccountInfo> {
+      try {
+        const normalizedId = this.normalizeAccountId(accountId);
+        let response;
+        
+        // Try with the normalized ID first
+        response = await fetch(`${this.baseUrl}/api/v1/accounts/${normalizedId}`);
+        
+        // If it's an EVM address and the direct query fails, try the accounts endpoint
+        if (!response.ok && normalizedId.startsWith('0x')) {
+          const evmResponse = await fetch(
+            `${this.baseUrl}/api/v1/accounts?account.publickey=${normalizedId.slice(2)}`
+          );
+          if (evmResponse.ok) {
+            const evmData = await evmResponse.json();
+            if (evmData.accounts && evmData.accounts.length > 0) {
+              return evmData.accounts[0];
+            }
+          }
+        }
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch account info: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data;
+      } catch (error) {
+        console.error('Error fetching account info:', error);
+        throw error;
+      }
+    }
+    ```
+
+    <Note>
+      The `normalizeAccountId` method handles both Hedera account IDs (0.0.xxxxx) and EVM addresses (0x...), making your app compatible with different wallet types.
+    </Note>
+  </Step>
+
+  <Step title="Display account information">
+    Use the service in your component to fetch and display account data:
+
+    ```typescript src/components/AccountDetails.tsx
+    import { useWallet } from '@/contexts/WalletContext';
+    import { MirrorNodeService } from '@/services/MirrorNodeService';
+
+    export const AccountDetails: React.FC = () => {
+      const { wallet } = useWallet();
+      const [accountInfo, setAccountInfo] = useState<any>(null);
+      const [loading, setLoading] = useState(false);
+      const mirrorNodeService = MirrorNodeService.getInstance();
+
+      const fetchAccountData = useCallback(async () => {
+        if (!wallet.isConnected || !wallet.accountId) return;
+        setLoading(true);
+        try {
+          const results = await Promise.allSettled([
+            mirrorNodeService.getAccountInfo(wallet.accountId),
+          ]);
+
+          if (results[0].status === 'fulfilled') {
+            setAccountInfo(results[0].value);
+          }
+        } catch (error) {
+          console.error('Error fetching account data:', error);
+        } finally {
+          setLoading(false);
+        }
+      }, [wallet.isConnected, wallet.accountId, mirrorNodeService]);
+
+      useEffect(() => {
+        fetchAccountData();
+      }, [fetchAccountData]);
+
+      const balanceNumeric = Number(accountInfo?.balance?.balance ?? 0);
+
+      return (
+        <div className="bg-muted/50 rounded-lg p-4">
+          <h4 className="text-sm font-medium text-muted-foreground mb-2">HBAR Balance</h4>
+          <p className="text-2xl font-bold text-foreground">
+            {mirrorNodeService.formatHbar(balanceNumeric)} HBAR
+          </p>
+        </div>
+      );
+    };
+    ```
+  </Step>
+
+  <Step title="Format and display HBAR amounts">
+    Add a utility method to convert tinybars to HBAR:
+
+    ```typescript src/services/MirrorNodeService.ts
+    /**
+     * Format HBAR amount from tinybars
+     */
+    formatHbar(tinybars: number): string {
+      return (tinybars / 100_000_000).toFixed(2);
+    }
+    ```
+
+    <Tip>
+      1 HBAR = 100,000,000 tinybars. Always store and transmit amounts in tinybars, then format for display.
+    </Tip>
+  </Step>
+</Steps>
+
+## Example response data
+
+Here's what a typical Mirror Node API response looks like:
+
+```json
+{
+  "account": "0.0.1234567",
+  "balance": {
+    "balance": 500000000,
+    "timestamp": "1699999999.123456789"
+  },
+  "created_timestamp": "1699999999.123456789",
+  "decline_reward": false,
+  "deleted": false,
+  "evm_address": "0x1234567890abcdef1234567890abcdef12345678",
+  "ethereum_nonce": 5,
+  "max_automatic_token_associations": 10,
+  "memo": "My Hedera Account",
+  "pending_reward": 0
+}
+```
+
+## Additional account details
+
+You can display more detailed account information:
+
+```typescript
+<div className="bg-muted/50 rounded-lg p-4">
+  <h4 className="text-sm font-medium text-muted-foreground mb-3">Account Information</h4>
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+    <div>
+      <span className="text-muted-foreground">Created:</span>
+      <span className="ml-2 text-foreground">
+        {new Date(Number(accountInfo?.created_timestamp.split('.')[0]) * 1000).toLocaleString()}
+      </span>
+    </div>
+    <div>
+      <span className="text-muted-foreground">EVM Address:</span>
+      <span className="ml-2 text-foreground font-mono text-xs">
+        {accountInfo?.evm_address ? `0x${accountInfo.evm_address}` : 'Not available'}
+      </span>
+    </div>
+    <div>
+      <span className="text-muted-foreground">Auto Token Associations:</span>
+      <span className="ml-2 text-foreground">
+        {accountInfo?.max_automatic_token_associations ?? '—'}
+      </span>
+    </div>
+    <div>
+      <span className="text-muted-foreground">Memo:</span>
+      <span className="ml-2 text-foreground">{accountInfo?.memo || 'None'}</span>
+    </div>
+  </div>
+</div>
+```
+
+## Error handling
+
+Always handle potential errors when fetching account data:
+
+```typescript
+try {
+  const accountInfo = await mirrorNodeService.getAccountInfo(accountId);
+  setAccountInfo(accountInfo);
+} catch (error) {
+  console.error('Error fetching account info:', error);
+  // Display error message to user
+  setError('Failed to load account information');
+}
+```
+
+<Warning>
+  The Mirror Node API may return a 404 error for newly created accounts that haven't been mirrored yet. Consider implementing retry logic or displaying a friendly message.
+</Warning>
+
+## Next steps
+
+- [Display token balances](/guides/token-balances) for the connected account
+- [View transaction history](/guides/transaction-history) using the Mirror Node
+- Learn about [staking rewards](https://docs.hedera.com/hedera/core-concepts/staking) on Hedera

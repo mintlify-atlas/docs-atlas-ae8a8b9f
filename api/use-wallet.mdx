@@ -1,0 +1,221 @@
+---
+title: 'useWallet'
+description: 'React hook for accessing wallet state and actions'
+---
+
+## Overview
+
+The `useWallet` hook provides access to the wallet context, allowing components to read and update wallet state. It must be used within a `WalletProvider`.
+
+**Source:** `src/contexts/WalletContext.tsx:40`
+
+## Usage
+
+```tsx
+import { useWallet } from '@/contexts/WalletContext';
+
+export function MyComponent() {
+  const { wallet, setWallet, disconnectWallet } = useWallet();
+  
+  if (!wallet.isConnected) {
+    return <div>Please connect your wallet</div>;
+  }
+  
+  return (
+    <div>
+      <p>Account: {wallet.accountId}</p>
+      <p>Balance: {wallet.balance} HBAR</p>
+      <button onClick={disconnectWallet}>Disconnect</button>
+    </div>
+  );
+}
+```
+
+## Return Value
+
+The hook returns an object with the following properties:
+
+<ResponseField name="wallet" type="WalletInfo" required>
+  Current wallet state
+  
+  <Expandable title="WalletInfo properties">
+    <ResponseField name="accountId" type="string">
+      The Hedera account ID (e.g., "0.0.12345") or EVM address
+    </ResponseField>
+    
+    <ResponseField name="balance" type="string">
+      The HBAR balance as a string
+    </ResponseField>
+    
+    <ResponseField name="isConnected" type="boolean">
+      Whether a wallet is currently connected
+    </ResponseField>
+    
+    <ResponseField name="provider" type="any" optional>
+      The wallet provider instance (WalletConnect or MetaMask)
+    </ResponseField>
+    
+    <ResponseField name="walletType" type="'walletconnect' | 'metamask'" optional>
+      The type of wallet connected
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="setWallet" type="(wallet: WalletInfo) => void" required>
+  Function to update the wallet state. Use this after successfully connecting a wallet.
+  
+  ```tsx
+  setWallet({
+    accountId: '0.0.12345',
+    balance: '100.00',
+    isConnected: true,
+    provider: walletProvider,
+    walletType: 'walletconnect'
+  });
+  ```
+</ResponseField>
+
+<ResponseField name="disconnectWallet" type="() => void" required>
+  Function to disconnect the wallet and clear all stored data. Automatically clears localStorage items.
+  
+  ```tsx
+  disconnectWallet(); // Resets wallet state and clears localStorage
+  ```
+</ResponseField>
+
+## Type Definition
+
+```typescript src/contexts/WalletContext.tsx:40-45
+export function useWallet() {
+  const context = useContext(WalletContext);
+  if (context === undefined) {
+    throw new Error('useWallet must be used within a WalletProvider');
+  }
+  return context;
+}
+```
+
+## Error Handling
+
+The hook will throw an error if used outside of a `WalletProvider`:
+
+```typescript
+if (context === undefined) {
+  throw new Error('useWallet must be used within a WalletProvider');
+}
+```
+
+Make sure your component tree is wrapped with `WalletProvider`:
+
+```tsx
+// ✅ Correct
+<WalletProvider>
+  <MyComponent /> {/* Can use useWallet */}
+</WalletProvider>
+
+// ❌ Incorrect - will throw error
+<MyComponent /> {/* useWallet will throw */}
+```
+
+## Examples
+
+### Check Connection Status
+
+```tsx src/components/AccountDetails.tsx:103-113
+const { wallet } = useWallet();
+
+if (!wallet.isConnected) {
+  return (
+    <div className="bg-card border border-border rounded-lg p-6">
+      <div className="text-center py-8">
+        <Wallet className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-card-foreground mb-2">Account Details</h3>
+        <p className="text-muted-foreground">Connect your wallet to view account information</p>
+      </div>
+    </div>
+  );
+}
+```
+
+### Display Account Info
+
+```tsx src/components/WalletConnect.tsx:137-166
+const { wallet } = useWallet();
+
+if (wallet.isConnected && wallet.accountId) {
+  return (
+    <div className="bg-card border border-border rounded-lg p-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-full">
+            <Wallet className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="font-medium text-card-foreground">Wallet Connected</p>
+            <p className="text-sm text-muted-foreground font-mono">
+              {wallet.accountId}
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleDisconnect}>
+          Disconnect
+        </Button>
+      </div>
+    </div>
+  );
+}
+```
+
+### Connect Wallet
+
+```tsx src/components/WalletConnect.tsx:37-43
+const { setWallet } = useWallet();
+
+setWallet({
+  accountId: accountId,
+  balance: '0.00',
+  isConnected: true,
+  provider,
+  walletType: 'walletconnect'
+});
+```
+
+### Disconnect Wallet
+
+```tsx src/components/WalletConnect.tsx:122-125
+const { disconnectWallet } = useWallet();
+
+const handleDisconnect = () => {
+  disconnectWallet();
+  setError(null);
+};
+```
+
+### Fetch Data Based on Connected Wallet
+
+```tsx src/components/AccountDetails.tsx:28-40
+const { wallet } = useWallet();
+const [accountInfo, setAccountInfo] = useState<any>(null);
+
+const fetchAccountData = useCallback(async () => {
+  if (!wallet.isConnected || !wallet.accountId) return;
+  
+  setLoading(true);
+  try {
+    const results = await Promise.allSettled([
+      mirrorNodeService.getAccountInfo(wallet.accountId),
+      mirrorNodeService.getAccountTokenBalancesWithInfo(wallet.accountId),
+      mirrorNodeService.getAccountTransactions(wallet.accountId, 10),
+    ]);
+    // Process results...
+  } finally {
+    setLoading(false);
+  }
+}, [wallet.isConnected, wallet.accountId]);
+```
+
+## Related
+
+- [WalletContext](/api/wallet-context) - Context provider documentation
+- [TypeScript Types](/api/types) - Complete type reference
+- [WalletConnect component](/components/wallet-connect) - UI component for wallet connection

@@ -1,0 +1,193 @@
+---
+title: "Architecture"
+description: "Understanding the client-first architecture of Hedera DX Starter Kit"
+---
+
+## Overview
+
+The Hedera DX Starter Kit is built on a **client-first architecture** using Next.js 15, with no backend server required. All interactions with the Hedera network happen directly from the browser using the Mirror Node REST API for reads and wallet-signed transactions for writes.
+
+## Key Architectural Principles
+
+### 1. Client-Side Only
+
+The entire application runs in the browser. There is no backend server, API routes, or server-side authentication. This approach provides:
+
+- **Simplicity**: No server infrastructure to maintain
+- **Security**: Private keys never leave the user's wallet
+- **Transparency**: All network calls are visible and verifiable
+- **Cost-effectiveness**: No server hosting costs
+
+### 2. Read-Heavy Design
+
+The starter kit is optimized for reading blockchain data through Hedera's Mirror Node, which provides:
+
+- Real-time account information
+- Token balances and metadata
+- Transaction history
+- Network statistics
+
+All read operations are free and require no authentication.
+
+### 3. Wallet-Signed Transactions
+
+For write operations (transfers, token creation), the app:
+
+1. Prepares transactions using the Hedera SDK
+2. Serializes them to base64
+3. Sends to the connected wallet for signing
+4. The wallet submits the signed transaction to the network
+
+**Your private keys never leave the wallet extension.**
+
+## Folder Structure
+
+The source code follows Next.js 15 conventions with a clean separation of concerns:
+
+```
+src/
+├── app/                    # Next.js App Router pages
+│   ├── layout.tsx         # Root layout with providers
+│   ├── page.tsx           # Homepage with wallet connect
+│   └── tutorial/          # Tutorial page
+├── components/            # React components
+│   ├── WalletConnect.tsx  # Wallet connection UI
+│   ├── AccountDetails.tsx # Account info display
+│   ├── ApiPlayground.tsx  # Mirror Node API explorer
+│   └── ui/               # Reusable UI components
+├── contexts/              # React Context providers
+│   └── WalletContext.tsx  # Global wallet state
+├── services/              # Business logic layer
+│   ├── MirrorNodeService.ts  # Mirror Node API client
+│   └── HederaService.ts      # Hedera SDK wrapper
+└── lib/                   # Utilities
+    └── utils.ts          # Helper functions
+```
+
+### Key Directories Explained
+
+#### `app/`
+Contains Next.js 15 App Router pages and layouts. The `layout.tsx` file wraps the app with necessary providers:
+
+```tsx
+// Providers wrap the entire app
+<WalletProvider>
+  <ThemeProvider>
+    {children}
+  </ThemeProvider>
+</WalletProvider>
+```
+
+#### `services/`
+Core business logic abstracted into singleton services:
+
+- **MirrorNodeService**: Handles all read operations from the Mirror Node REST API
+- **HederaService**: Prepares transactions using the Hedera SDK for wallet signing
+
+Both use the singleton pattern to maintain a single instance across the app.
+
+#### `components/`
+Reusable React components that compose the UI. Components are organized by function:
+
+- Wallet components for connection management
+- Account components for displaying blockchain data
+- UI components for consistent styling
+
+#### `contexts/`
+React Context providers for global state management. The `WalletContext` maintains:
+
+- Connected account ID
+- Wallet connection status
+- Provider instance (MetaMask or WalletConnect)
+- Disconnect functionality
+
+## Data Flow
+
+### Reading Data
+
+```
+User Action → React Component → MirrorNodeService → Mirror Node API → Display
+```
+
+Example: Fetching account balance
+1. User connects wallet
+2. `AccountDetails` component calls `MirrorNodeService.getAccountInfo()`
+3. Service fetches from `https://testnet.mirrornode.hedera.com/api/v1/accounts/{id}`
+4. Component displays the balance
+
+### Writing Data (Transactions)
+
+```
+User Action → HederaService.prepare() → Wallet Sign → Network Submit → Mirror Node Query
+```
+
+Example: Sending HBAR
+1. User enters recipient and amount
+2. `HederaService.sendHbar()` creates and freezes a `TransferTransaction`
+3. Transaction is serialized to base64
+4. Wallet extension prompts user to sign
+5. Wallet submits signed transaction to Hedera network
+6. App queries Mirror Node to confirm transaction
+
+## Security Model
+
+### Private Key Security
+
+- Private keys are stored in wallet extensions (MetaMask, HashPack)
+- The dApp never has access to private keys
+- All transactions are signed within the wallet's secure environment
+- Users explicitly approve each transaction
+
+### Network Configuration
+
+The app connects to Hedera Testnet by default:
+
+- **Chain ID**: 296 (0x128 in hex)
+- **RPC URL**: `https://testnet.hashio.io/api`
+- **Mirror Node**: `https://testnet.mirrornode.hedera.com`
+
+Configuration can be changed via environment variables for mainnet or other networks.
+
+## Benefits of This Architecture
+
+<AccordionGroup>
+  <Accordion title="No Backend Complexity">
+    Eliminates server costs, deployment complexity, and maintenance overhead. The entire app can be deployed to static hosting (Vercel, Netlify, GitHub Pages).
+  </Accordion>
+
+  <Accordion title="Enhanced Security">
+    Private keys never leave the user's wallet. No server-side key management or authentication required. Reduced attack surface.
+  </Accordion>
+
+  <Accordion title="Transparent & Verifiable">
+    All network calls are visible in browser DevTools. Users can verify exactly what data is being requested and what transactions are being signed.
+  </Accordion>
+
+  <Accordion title="Developer Experience">
+    Simple mental model: UI components → Services → Hedera network. Easy to understand, debug, and extend.
+  </Accordion>
+
+  <Accordion title="Cost Effective">
+    No server hosting costs. Mirror Node queries are free. Only pay network fees for transactions.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Wallet Integration" icon="wallet" href="/concepts/wallet-integration">
+    Learn how wallet connection works with MetaMask and HashPack
+  </Card>
+  
+  <Card title="Mirror Node" icon="database" href="/concepts/mirror-node">
+    Understand the Mirror Node REST API integration
+  </Card>
+  
+  <Card title="Hedera Services" icon="code" href="/concepts/hedera-services">
+    Explore transaction preparation with the Hedera SDK
+  </Card>
+  
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get started building your Hedera dApp
+  </Card>
+</CardGroup>

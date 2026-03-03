@@ -1,0 +1,529 @@
+---
+title: "Mirror Node"
+description: "Understanding Hedera Mirror Node REST API integration"
+---
+
+## What is Mirror Node?
+
+The Hedera Mirror Node is a dedicated network node that stores the history of transactions and state changes on the Hedera network. Unlike consensus nodes, mirror nodes:
+
+- Provide **read-only access** to historical data
+- Offer a **REST API** for easy querying
+- Are **free to use** (no API keys or fees required)
+- Update in **near real-time** (usually within 1-2 seconds)
+- Support **efficient pagination** for large datasets
+
+<Info>
+  Mirror nodes do not participate in consensus. They consume the consensus data stream and provide queryable historical records.
+</Info>
+
+## MirrorNodeService Architecture
+
+The starter kit provides a singleton service class that wraps all Mirror Node API calls:
+
+```tsx
+export class MirrorNodeService {
+  private static instance: MirrorNodeService;
+  private baseUrl: string;
+  public readonly network: string;
+
+  private constructor() {
+    this.baseUrl = MIRROR_NODE_URL;
+    this.network = NETWORK;
+  }
+
+  public static getInstance(): MirrorNodeService {
+    if (!MirrorNodeService.instance) {
+      MirrorNodeService.instance = new MirrorNodeService();
+    }
+    return MirrorNodeService.instance;
+  }
+
+  public getBaseUrl(): string {
+    return this.baseUrl;
+  }
+}
+```
+
+### Singleton Pattern
+
+The service uses a singleton to ensure:
+- Single instance across the app
+- Consistent configuration
+- Efficient resource usage
+
+### Configuration
+
+From `src/services/MirrorNodeService.ts:4-10`:
+
+```tsx
+const DEFAULT_MIRROR_NODE_URL = 'https://testnet.mirrornode.hedera.com';
+const MIRROR_NODE_URL =
+  (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_MIRROR_NODE_URL) ||
+  DEFAULT_MIRROR_NODE_URL;
+const NETWORK =
+  (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_NETWORK) ||
+  'testnet';
+```
+
+Override with environment variables:
+- `NEXT_PUBLIC_MIRROR_NODE_URL` - Custom mirror node URL
+- `NEXT_PUBLIC_NETWORK` - Network name (testnet/mainnet)
+
+## Core API Methods
+
+### Get Account Information
+
+Fetches comprehensive account details including balance, created timestamp, and configuration.
+
+```tsx
+async getAccountInfo(accountId: string): Promise<AccountInfo> {
+  try {
+    const normalizedId = this.normalizeAccountId(accountId);
+    let response;
+    
+    // Try with the normalized ID first
+    response = await fetch(`${this.baseUrl}/api/v1/accounts/${normalizedId}`);
+    
+    // If it's an EVM address and the direct query fails, try the accounts endpoint
+    if (!response.ok && normalizedId.startsWith('0x')) {
+      const evmResponse = await fetch(`${this.baseUrl}/api/v1/accounts?account.publickey=${normalizedId.slice(2)}`);
+      if (evmResponse.ok) {
+        const evmData = await evmResponse.json();
+        if (evmData.accounts && evmData.accounts.length > 0) {
+          return evmData.accounts[0];
+        }
+      }
+    }
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch account info: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching account info:', error);
+    throw error;
+  }
+}
+```
+
+**API Endpoint**: `GET /api/v1/accounts/{accountId}`
+
+**Example Response**:
+
+```json
+{
+  "account": "0.0.12345",
+  "balance": {
+    "balance": 150000000000,
+    "timestamp": "1234567890.123456789"
+  },
+  "alias": "",
+  "created_timestamp": "1620000000.000000000",
+  "decline_reward": false,
+  "deleted": false,
+  "ethereum_nonce": 5,
+  "evm_address": "0xabcdef1234567890abcdef1234567890abcdef12",
+  "max_automatic_token_associations": 10,
+  "memo": "My Hedera Account",
+  "pending_reward": 0,
+  "receiver_sig_required": false
+}
+```
+
+### Get Token Balances
+
+Retrieves all fungible and non-fungible token balances for an account.
+
+```tsx
+async getAccountTokenBalances(accountId: string): Promise<TokenBalance[]> {
+  try {
+    const normalizedId = this.normalizeAccountId(accountId);
+    
+    // If we have an EVM address, we need to first get the account ID
+    let targetAccountId = normalizedId;
+    if (normalizedId.startsWith('0x')) {
+      try {
+        const accountInfo = await this.getAccountInfo(normalizedId);
+        targetAccountId = accountInfo.account;
+      } catch (error) {
+        console.warn('Could not resolve EVM address to account ID:', error);
+        return [];
+      }
+    }
+    
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/accounts/${targetAccountId}/tokens?limit=100`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch token balances: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data.tokens || [];
+  } catch (error) {
+    console.error('Error fetching token balances:', error);
+    throw error;
+  }
+}
+```
+
+**API Endpoint**: `GET /api/v1/accounts/{accountId}/tokens?limit=100`
+
+**Example Response**:
+
+```json
+{
+  "tokens": [
+    {
+      "account": "0.0.12345",
+      "balance": 1000000,
+      "decimals": 6,
+      "token_id": "0.0.54321"
+    },
+    {
+      "account": "0.0.12345",
+      "balance": 5000000000,
+      "decimals": 8,
+      "token_id": "0.0.98765"
+    }
+  ],
+  "links": {
+    "next": null
+  }
+}
+```
+
+### Get Token Information
+
+Fetches detailed metadata about a specific token.
+
+```tsx
+async getTokenInfo(tokenId: string): Promise<TokenInfo> {
+  try {
+    const response = await fetch(`${this.baseUrl}/api/v1/tokens/${tokenId}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch token info: ${response.statusText}`);
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching token info:', error);
+    throw error;
+  }
+}
+```
+
+**API Endpoint**: `GET /api/v1/tokens/{tokenId}`
+
+**Example Response**:
+
+```json
+{
+  "token_id": "0.0.54321",
+  "symbol": "USDC",
+  "name": "USD Coin",
+  "decimals": "6",
+  "initial_supply": "1000000000000",
+  "total_supply": "1000000000000",
+  "treasury_account_id": "0.0.12345",
+  "type": "FUNGIBLE_COMMON",
+  "supply_type": "INFINITE",
+  "freeze_default": false,
+  "created_timestamp": "1620000000.000000000",
+  "modified_timestamp": "1620000000.000000000"
+}
+```
+
+### Get Account Transactions
+
+Retrieves transaction history for an account with pagination.
+
+```tsx
+async getAccountTransactions(
+  accountId: string, 
+  limit: number = 25
+): Promise<Transaction[]> {
+  try {
+    const normalizedId = this.normalizeAccountId(accountId);
+    
+    // If we have an EVM address, we need to first get the account ID
+    let targetAccountId = normalizedId;
+    if (normalizedId.startsWith('0x')) {
+      try {
+        const accountInfo = await this.getAccountInfo(normalizedId);
+        targetAccountId = accountInfo.account;
+      } catch (error) {
+        console.warn('Could not resolve EVM address to account ID:', error);
+        return [];
+      }
+    }
+    
+    const response = await fetch(
+      `${this.baseUrl}/api/v1/transactions?account.id=${targetAccountId}&limit=${limit}&order=desc`
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch transactions: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data.transactions || [];
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    throw error;
+  }
+}
+```
+
+**API Endpoint**: `GET /api/v1/transactions?account.id={accountId}&limit=25&order=desc`
+
+**Example Response**:
+
+```json
+{
+  "transactions": [
+    {
+      "charged_tx_fee": 100000,
+      "consensus_timestamp": "1234567890.123456789",
+      "entity_id": "0.0.67890",
+      "max_fee": "200000",
+      "name": "CRYPTOTRANSFER",
+      "node": "0.0.3",
+      "nonce": 0,
+      "result": "SUCCESS",
+      "scheduled": false,
+      "transaction_hash": "abc123def456...",
+      "transaction_id": "0.0.12345-1234567890-123456789",
+      "transfers": [
+        {
+          "account": "0.0.12345",
+          "amount": -10000000000,
+          "is_approval": false
+        },
+        {
+          "account": "0.0.67890",
+          "amount": 10000000000,
+          "is_approval": false
+        }
+      ],
+      "valid_duration_seconds": "120",
+      "valid_start_timestamp": "1234567890.123456789"
+    }
+  ],
+  "links": {
+    "next": "/api/v1/transactions?account.id=0.0.12345&timestamp=lt:1234567890.123456789&limit=25"
+  }
+}
+```
+
+## Advanced Features
+
+### EVM Address Normalization
+
+The service automatically handles both Hedera account IDs (`0.0.12345`) and EVM addresses (`0xabc...`):
+
+```tsx
+private normalizeAccountId(accountId: string): string {
+  // If it's already a Hedera account ID (0.0.xxxxx), return as-is
+  if (accountId.match(/^0\.0\.[0-9]+$/)) {
+    return accountId;
+  }
+  
+  // If it's an EVM address (0x...), we need to query by EVM address
+  if (accountId.startsWith('0x')) {
+    return accountId;
+  }
+  
+  // Return as-is and let the API handle it
+  return accountId;
+}
+```
+
+### Token Balances with Metadata
+
+Combines balance and token info in a single call:
+
+```tsx
+async getAccountTokenBalancesWithInfo(accountId: string): Promise<Array<TokenBalance & Partial<TokenInfo>>> {
+  try {
+    const tokenBalances = await this.getAccountTokenBalances(accountId);
+    
+    const balancesWithInfo = await Promise.allSettled(
+      tokenBalances.map(async (balance) => {
+        try {
+          const tokenInfo = await this.getTokenInfo(balance.token_id);
+          return {
+            ...balance,
+            ...tokenInfo,
+            decimals: parseInt(tokenInfo.decimals) || 0,
+          };
+        } catch (error) {
+          console.warn(`Failed to fetch info for token ${balance.token_id}:`, error);
+          return balance;
+        }
+      })
+    );
+
+    return balancesWithInfo
+      .filter((result): result is PromiseFulfilledResult<TokenBalance & Partial<TokenInfo>> => 
+        result.status === 'fulfilled'
+      )
+      .map(result => result.value);
+  } catch (error) {
+    console.error('Error fetching token balances with info:', error);
+    throw error;
+  }
+}
+```
+
+This method:
+1. Fetches all token balances
+2. For each token, fetches detailed metadata
+3. Combines the data into enriched balance objects
+4. Handles failures gracefully with `Promise.allSettled`
+
+## Utility Methods
+
+### Format HBAR Amount
+
+Convert tinybars to HBAR:
+
+```tsx
+formatHbar(tinybars: number): string {
+  return (tinybars / 100_000_000).toFixed(2);
+}
+```
+
+Example: `150000000000` → `"1500.00"` HBAR
+
+### Format Token Amount
+
+Format token amounts with decimals:
+
+```tsx
+formatTokenAmount(amount: number, decimals: number = 0): string {
+  const divisor = Math.pow(10, decimals);
+  return (amount / divisor).toLocaleString();
+}
+```
+
+Example: `1000000` with 6 decimals → `"1.00"`
+
+### Transaction Status
+
+Human-readable transaction status:
+
+```tsx
+getTransactionStatus(result: string): { success: boolean; message: string } {
+  switch (result) {
+    case 'SUCCESS':
+      return { success: true, message: 'Transaction successful' };
+    case 'INSUFFICIENT_PAYER_BALANCE':
+      return { success: false, message: 'Insufficient balance' };
+    case 'INVALID_ACCOUNT_ID':
+      return { success: false, message: 'Invalid account ID' };
+    case 'INSUFFICIENT_TX_FEE':
+      return { success: false, message: 'Insufficient transaction fee' };
+    default:
+      return { success: false, message: result.replace(/_/g, ' ').toLowerCase() };
+  }
+}
+```
+
+## Using Mirror Node Service
+
+### In Components
+
+```tsx
+import MirrorNodeService from '@/services/MirrorNodeService';
+
+function MyComponent() {
+  const [accountInfo, setAccountInfo] = useState(null);
+  const mirror = MirrorNodeService.getInstance();
+  
+  useEffect(() => {
+    async function fetchAccount() {
+      const info = await mirror.getAccountInfo('0.0.12345');
+      setAccountInfo(info);
+    }
+    fetchAccount();
+  }, []);
+  
+  if (!accountInfo) return <div>Loading...</div>;
+  
+  return (
+    <div>
+      <p>Balance: {mirror.formatHbar(accountInfo.balance.balance)} HBAR</p>
+      <p>Account: {accountInfo.account}</p>
+    </div>
+  );
+}
+```
+
+## API Rate Limits
+
+<Warning>
+  Mirror Node REST API has rate limits:
+  - **200 requests per second** per IP
+  - **Burst tolerance** for short spikes
+  
+  Implement caching and debouncing for production apps.
+</Warning>
+
+## Error Handling
+
+All methods throw errors that should be caught:
+
+```tsx
+try {
+  const account = await mirror.getAccountInfo(accountId);
+  console.log(account);
+} catch (error) {
+  if (error.message.includes('Failed to fetch')) {
+    // Network error
+  } else if (error.message.includes('404')) {
+    // Account not found
+  }
+}
+```
+
+## Supported Networks
+
+<Tabs>
+  <Tab title="Testnet">
+    ```
+    https://testnet.mirrornode.hedera.com
+    ```
+    Free for development and testing
+  </Tab>
+  
+  <Tab title="Mainnet">
+    ```
+    https://mainnet.mirrornode.hedera.com
+    ```
+    Production network (costs real HBAR)
+  </Tab>
+  
+  <Tab title="Previewnet">
+    ```
+    https://previewnet.mirrornode.hedera.com
+    ```
+    Beta features and upcoming releases
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Hedera Services" icon="code" href="/concepts/hedera-services">
+    Learn about transaction preparation with the Hedera SDK
+  </Card>
+  
+  <Card title="Mirror Node API Docs" icon="book" href="https://docs.hedera.com/hedera/sdks-and-apis/rest-api">
+    Complete REST API reference
+  </Card>
+</CardGroup>

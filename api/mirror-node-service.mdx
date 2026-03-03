@@ -1,0 +1,552 @@
+---
+title: "MirrorNodeService"
+description: "Complete API reference for MirrorNodeService singleton"
+---
+
+The `MirrorNodeService` is a singleton class that provides a client-side interface to the Hedera Mirror Node REST API. It allows you to query account information, token balances, transactions, and other on-chain data without executing transactions.
+
+## Singleton Pattern
+
+### getInstance()
+
+Get the singleton instance of MirrorNodeService.
+
+```typescript
+static getInstance(): MirrorNodeService
+```
+
+<ResponseField name="instance" type="MirrorNodeService">
+  The singleton instance of MirrorNodeService
+</ResponseField>
+
+**Example:**
+
+```typescript
+import { MirrorNodeService } from '@/services/MirrorNodeService';
+
+const mirrorNode = MirrorNodeService.getInstance();
+```
+
+## Configuration Methods
+
+### getBaseUrl()
+
+Get the configured Mirror Node base URL.
+
+```typescript
+getBaseUrl(): string
+```
+
+<ResponseField name="baseUrl" type="string">
+  The Mirror Node API base URL (defaults to `https://testnet.mirrornode.hedera.com`)
+</ResponseField>
+
+### network
+
+Read-only property containing the network name.
+
+```typescript
+public readonly network: string
+```
+
+<ResponseField name="network" type="string">
+  The Hedera network name (e.g., "testnet", "mainnet")
+</ResponseField>
+
+## Account Methods
+
+### getAccountInfo()
+
+Retrieve detailed account information from the Mirror Node. Supports both Hedera account IDs (0.0.xxxxx) and EVM addresses (0x...).
+
+```typescript
+async getAccountInfo(accountId: string): Promise<AccountInfo>
+```
+
+<ParamField path="accountId" type="string" required>
+  Hedera account ID (e.g., "0.0.12345") or EVM address (e.g., "0x...")
+</ParamField>
+
+<ResponseField name="response" type="AccountInfo">
+  Account information object containing balance, timestamps, and configuration
+</ResponseField>
+
+**Example:**
+
+```typescript
+const accountInfo = await mirrorNode.getAccountInfo('0.0.12345');
+console.log(`Balance: ${accountInfo.balance.balance} tinybars`);
+console.log(`EVM Address: ${accountInfo.evm_address}`);
+```
+
+### getAccountTokenBalances()
+
+Retrieve all token balances for a specific account.
+
+```typescript
+async getAccountTokenBalances(accountId: string): Promise<TokenBalance[]>
+```
+
+<ParamField path="accountId" type="string" required>
+  Hedera account ID or EVM address
+</ParamField>
+
+<ResponseField name="response" type="TokenBalance[]">
+  Array of token balance objects (up to 100 tokens)
+</ResponseField>
+
+**Example:**
+
+```typescript
+const balances = await mirrorNode.getAccountTokenBalances('0.0.12345');
+balances.forEach(balance => {
+  console.log(`Token ${balance.token_id}: ${balance.balance}`);
+});
+```
+
+### getAccountTokenBalancesWithInfo()
+
+Retrieve token balances enriched with full token metadata (name, symbol, decimals, etc.).
+
+```typescript
+async getAccountTokenBalancesWithInfo(
+  accountId: string
+): Promise<Array<TokenBalance & Partial<TokenInfo>>>
+```
+
+<ParamField path="accountId" type="string" required>
+  Hedera account ID or EVM address
+</ParamField>
+
+<ResponseField name="response" type="Array<TokenBalance & Partial<TokenInfo>>">
+  Array of token balances merged with token information
+</ResponseField>
+
+**Example:**
+
+```typescript
+const enrichedBalances = await mirrorNode.getAccountTokenBalancesWithInfo('0.0.12345');
+enrichedBalances.forEach(token => {
+  console.log(`${token.name} (${token.symbol}): ${token.balance}`);
+  console.log(`Decimals: ${token.decimals}`);
+});
+```
+
+## Token Methods
+
+### getTokenInfo()
+
+Retrieve detailed information about a specific token.
+
+```typescript
+async getTokenInfo(tokenId: string): Promise<TokenInfo>
+```
+
+<ParamField path="tokenId" type="string" required>
+  Token ID in format "0.0.xxxxx"
+</ParamField>
+
+<ResponseField name="response" type="TokenInfo">
+  Complete token metadata including supply, keys, and configuration
+</ResponseField>
+
+**Example:**
+
+```typescript
+const tokenInfo = await mirrorNode.getTokenInfo('0.0.67890');
+console.log(`Token: ${tokenInfo.name} (${tokenInfo.symbol})`);
+console.log(`Type: ${tokenInfo.type}`);
+console.log(`Total Supply: ${tokenInfo.total_supply}`);
+console.log(`Decimals: ${tokenInfo.decimals}`);
+```
+
+### isTokenAssociated()
+
+Check if an account is associated with a specific token.
+
+```typescript
+async isTokenAssociated(accountId: string, tokenId: string): Promise<boolean>
+```
+
+<ParamField path="accountId" type="string" required>
+  Hedera account ID or EVM address
+</ParamField>
+
+<ParamField path="tokenId" type="string" required>
+  Token ID to check association for
+</ParamField>
+
+<ResponseField name="response" type="boolean">
+  `true` if the account is associated with the token, `false` otherwise
+</ResponseField>
+
+**Example:**
+
+```typescript
+const isAssociated = await mirrorNode.isTokenAssociated('0.0.12345', '0.0.67890');
+if (!isAssociated) {
+  console.log('Account needs to associate with token first');
+}
+```
+
+## Transaction Methods
+
+### getAccountTransactions()
+
+Retrieve transaction history for an account, ordered by most recent first.
+
+```typescript
+async getAccountTransactions(
+  accountId: string,
+  limit: number = 25
+): Promise<Transaction[]>
+```
+
+<ParamField path="accountId" type="string" required>
+  Hedera account ID or EVM address
+</ParamField>
+
+<ParamField path="limit" type="number" default={25}>
+  Maximum number of transactions to retrieve (default: 25)
+</ParamField>
+
+<ResponseField name="response" type="Transaction[]">
+  Array of transaction objects in descending chronological order
+</ResponseField>
+
+**Example:**
+
+```typescript
+const transactions = await mirrorNode.getAccountTransactions('0.0.12345', 50);
+transactions.forEach(tx => {
+  console.log(`${tx.name} - ${tx.result}`);
+  console.log(`Transaction ID: ${tx.transaction_id}`);
+  console.log(`Fee: ${tx.charged_tx_fee} tinybars`);
+});
+```
+
+### getTransactionStatus()
+
+Convert a transaction result code into a human-readable status message.
+
+```typescript
+getTransactionStatus(result: string): { success: boolean; message: string }
+```
+
+<ParamField path="result" type="string" required>
+  Transaction result code (e.g., "SUCCESS", "INSUFFICIENT_PAYER_BALANCE")
+</ParamField>
+
+<ResponseField name="success" type="boolean">
+  Whether the transaction was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Human-readable status message
+</ResponseField>
+
+**Example:**
+
+```typescript
+const status = mirrorNode.getTransactionStatus('SUCCESS');
+console.log(status.message); // "Transaction successful"
+
+const errorStatus = mirrorNode.getTransactionStatus('INSUFFICIENT_PAYER_BALANCE');
+console.log(errorStatus.message); // "Insufficient balance"
+```
+
+## Formatting Utilities
+
+### formatHbar()
+
+Convert tinybars to HBAR with 2 decimal places.
+
+```typescript
+formatHbar(tinybars: number): string
+```
+
+<ParamField path="tinybars" type="number" required>
+  Amount in tinybars (1 HBAR = 100,000,000 tinybars)
+</ParamField>
+
+<ResponseField name="response" type="string">
+  Formatted HBAR amount as string (e.g., "5.00")
+</ResponseField>
+
+**Example:**
+
+```typescript
+const hbar = mirrorNode.formatHbar(500000000);
+console.log(`${hbar} HBAR`); // "5.00 HBAR"
+```
+
+### formatTokenAmount()
+
+Format token amount with proper decimal places.
+
+```typescript
+formatTokenAmount(amount: number, decimals: number = 0): string
+```
+
+<ParamField path="amount" type="number" required>
+  Raw token amount (smallest unit)
+</ParamField>
+
+<ParamField path="decimals" type="number" default={0}>
+  Number of decimal places for the token
+</ParamField>
+
+<ResponseField name="response" type="string">
+  Formatted token amount with locale-specific thousand separators
+</ResponseField>
+
+**Example:**
+
+```typescript
+const amount = mirrorNode.formatTokenAmount(1000000, 6);
+console.log(amount); // "1"
+
+const largeAmount = mirrorNode.formatTokenAmount(1234567890, 2);
+console.log(largeAmount); // "12,345,678.90"
+```
+
+## TypeScript Interfaces
+
+### AccountInfo
+
+```typescript
+interface AccountInfo {
+  account: string;
+  balance: {
+    balance: number;
+    timestamp: string;
+  };
+  alias?: string;
+  auto_renew_period?: number;
+  created_timestamp: string;
+  decline_reward: boolean;
+  deleted: boolean;
+  ethereum_nonce?: number;
+  evm_address?: string;
+  expiry_timestamp?: string;
+  key?: any;
+  max_automatic_token_associations: number;
+  memo: string;
+  pending_reward: number;
+  receiver_sig_required?: boolean;
+  staked_account_id?: string;
+  staked_node_id?: number;
+  stake_period_start?: string;
+}
+```
+
+<ResponseField name="account" type="string">
+  Hedera account ID (e.g., "0.0.12345")
+</ResponseField>
+
+<ResponseField name="balance" type="object">
+  Current account balance
+  <ResponseField name="balance" type="number">
+    Balance in tinybars
+  </ResponseField>
+  <ResponseField name="timestamp" type="string">
+    Timestamp of balance snapshot
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="evm_address" type="string">
+  EVM-compatible address (0x...)
+</ResponseField>
+
+<ResponseField name="created_timestamp" type="string">
+  Account creation timestamp
+</ResponseField>
+
+<ResponseField name="memo" type="string">
+  Account memo
+</ResponseField>
+
+<ResponseField name="max_automatic_token_associations" type="number">
+  Maximum number of automatic token associations
+</ResponseField>
+
+### TokenBalance
+
+```typescript
+interface TokenBalance {
+  account: string;
+  balance: number;
+  decimals?: number;
+  token_id: string;
+}
+```
+
+<ResponseField name="account" type="string">
+  Account ID that holds the token
+</ResponseField>
+
+<ResponseField name="balance" type="number">
+  Token balance in smallest unit
+</ResponseField>
+
+<ResponseField name="decimals" type="number">
+  Number of decimal places (optional)
+</ResponseField>
+
+<ResponseField name="token_id" type="string">
+  Token ID (e.g., "0.0.67890")
+</ResponseField>
+
+### TokenInfo
+
+```typescript
+interface TokenInfo {
+  token_id: string;
+  symbol: string;
+  name: string;
+  decimals: string;
+  initial_supply: string;
+  total_supply: string;
+  treasury_account_id: string;
+  type: 'FUNGIBLE_COMMON' | 'NON_FUNGIBLE_UNIQUE';
+  supply_type: 'INFINITE' | 'FINITE';
+  max_supply?: string;
+  freeze_default: boolean;
+  freeze_key?: any;
+  kyc_key?: any;
+  pause_key?: any;
+  supply_key?: any;
+  wipe_key?: any;
+  fee_schedule_key?: any;
+  custom_fees?: any;
+  created_timestamp: string;
+  modified_timestamp: string;
+}
+```
+
+<ResponseField name="token_id" type="string">
+  Unique token identifier
+</ResponseField>
+
+<ResponseField name="symbol" type="string">
+  Token symbol (e.g., "USDC")
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Full token name
+</ResponseField>
+
+<ResponseField name="decimals" type="string">
+  Number of decimal places (as string)
+</ResponseField>
+
+<ResponseField name="type" type="'FUNGIBLE_COMMON' | 'NON_FUNGIBLE_UNIQUE'">
+  Token type
+</ResponseField>
+
+<ResponseField name="supply_type" type="'INFINITE' | 'FINITE'">
+  Supply type (infinite or capped)
+</ResponseField>
+
+<ResponseField name="total_supply" type="string">
+  Current total supply
+</ResponseField>
+
+<ResponseField name="treasury_account_id" type="string">
+  Treasury account that created the token
+</ResponseField>
+
+### Transaction
+
+```typescript
+interface Transaction {
+  bytes?: string;
+  charged_tx_fee: number;
+  consensus_timestamp: string;
+  entity_id?: string;
+  max_fee: string;
+  memo_base64?: string;
+  name: string;
+  nft_transfers?: any[];
+  node: string;
+  nonce: number;
+  parent_consensus_timestamp?: string;
+  result: string;
+  scheduled: boolean;
+  staking_reward_transfers?: any[];
+  token_transfers?: any[];
+  transaction_hash: string;
+  transaction_id: string;
+  transfers: Array<{
+    account: string;
+    amount: number;
+    is_approval?: boolean;
+  }>;
+  valid_duration_seconds: string;
+  valid_start_timestamp: string;
+}
+```
+
+<ResponseField name="name" type="string">
+  Transaction type name (e.g., "CRYPTOTRANSFER", "TOKENCREATION")
+</ResponseField>
+
+<ResponseField name="transaction_id" type="string">
+  Unique transaction identifier
+</ResponseField>
+
+<ResponseField name="result" type="string">
+  Transaction result code (e.g., "SUCCESS")
+</ResponseField>
+
+<ResponseField name="charged_tx_fee" type="number">
+  Actual fee charged in tinybars
+</ResponseField>
+
+<ResponseField name="consensus_timestamp" type="string">
+  When the transaction reached consensus
+</ResponseField>
+
+<ResponseField name="transfers" type="Array">
+  Array of HBAR transfers
+  <ResponseField name="account" type="string">
+    Account ID involved in transfer
+  </ResponseField>
+  <ResponseField name="amount" type="number">
+    Amount transferred (negative for debits, positive for credits)
+  </ResponseField>
+</ResponseField>
+
+## Usage Example
+
+```typescript
+import { MirrorNodeService } from '@/services/MirrorNodeService';
+
+const mirrorNode = MirrorNodeService.getInstance();
+
+// Get account information
+const accountInfo = await mirrorNode.getAccountInfo('0.0.12345');
+const hbarBalance = mirrorNode.formatHbar(accountInfo.balance.balance);
+console.log(`Account Balance: ${hbarBalance} HBAR`);
+
+// Get token balances with metadata
+const tokens = await mirrorNode.getAccountTokenBalancesWithInfo('0.0.12345');
+tokens.forEach(token => {
+  const formattedAmount = mirrorNode.formatTokenAmount(
+    token.balance,
+    parseInt(token.decimals || '0')
+  );
+  console.log(`${token.symbol}: ${formattedAmount}`);
+});
+
+// Check transaction history
+const transactions = await mirrorNode.getAccountTransactions('0.0.12345', 10);
+transactions.forEach(tx => {
+  const status = mirrorNode.getTransactionStatus(tx.result);
+  console.log(`${tx.name}: ${status.message}`);
+});
+```
+
+## Source Location
+
+`src/services/MirrorNodeService.ts:93-337`

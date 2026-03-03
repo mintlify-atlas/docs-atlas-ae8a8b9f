@@ -1,0 +1,173 @@
+---
+title: 'WalletContext'
+description: 'React context for wallet state management'
+---
+
+## Overview
+
+The `WalletContext` provides a centralized state management solution for wallet connectivity in your Hedera dApp. It manages wallet connection state, account information, and provides methods to connect and disconnect wallets.
+
+**Source:** `src/contexts/WalletContext.tsx:12`
+
+## WalletProvider
+
+The `WalletProvider` component wraps your application and provides wallet state to all child components.
+
+### Usage
+
+Wrap your application with the `WalletProvider` in your root layout or providers file:
+
+```tsx
+import { WalletProvider } from '@/contexts/WalletContext';
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <WalletProvider>
+      {children}
+    </WalletProvider>
+  );
+}
+```
+
+### Implementation
+
+```tsx src/contexts/WalletContext.tsx:14-38
+export function WalletProvider({ children }: { children: ReactNode }) {
+  const [wallet, setWallet] = useState<WalletInfo>({
+    accountId: '',
+    balance: '',
+    isConnected: false,
+  });
+
+  const disconnectWallet = () => {
+    setWallet({
+      accountId: '',
+      balance: '',
+      isConnected: false,
+    });
+    // Clear localStorage
+    localStorage.removeItem('wallet_connected');
+    localStorage.removeItem('wallet_account');
+    localStorage.removeItem('wallet_type');
+  };
+
+  return (
+    <WalletContext.Provider value={{ wallet, setWallet, disconnectWallet }}>
+      {children}
+    </WalletContext.Provider>
+  );
+}
+```
+
+## WalletContextType Interface
+
+The context provides the following interface:
+
+<ResponseField name="wallet" type="WalletInfo" required>
+  Current wallet state containing account ID, balance, and connection status
+</ResponseField>
+
+<ResponseField name="setWallet" type="(wallet: WalletInfo) => void" required>
+  Function to update the wallet state
+</ResponseField>
+
+<ResponseField name="disconnectWallet" type="() => void" required>
+  Function to disconnect the wallet and clear all stored data
+</ResponseField>
+
+### Type Definition
+
+```typescript src/contexts/WalletContext.tsx:6-10
+interface WalletContextType {
+  wallet: WalletInfo;
+  setWallet: (wallet: WalletInfo) => void;
+  disconnectWallet: () => void;
+}
+```
+
+## Wallet State Shape
+
+The default wallet state structure:
+
+```typescript src/contexts/WalletContext.tsx:15-19
+{
+  accountId: '',
+  balance: '',
+  isConnected: false,
+}
+```
+
+<ResponseField name="accountId" type="string">
+  The Hedera account ID (e.g., "0.0.12345") or EVM address
+</ResponseField>
+
+<ResponseField name="balance" type="string">
+  The HBAR balance as a string
+</ResponseField>
+
+<ResponseField name="isConnected" type="boolean">
+  Whether a wallet is currently connected
+</ResponseField>
+
+<ResponseField name="provider" type="any" optional>
+  The wallet provider instance (WalletConnect or MetaMask)
+</ResponseField>
+
+<ResponseField name="walletType" type="'walletconnect' | 'metamask'" optional>
+  The type of wallet connected
+</ResponseField>
+
+## Methods
+
+### disconnectWallet()
+
+Disconnects the current wallet and clears all stored data including:
+- Wallet state (accountId, balance, isConnected)
+- localStorage items (wallet_connected, wallet_account, wallet_type)
+
+```typescript src/contexts/WalletContext.tsx:21-31
+const disconnectWallet = () => {
+  setWallet({
+    accountId: '',
+    balance: '',
+    isConnected: false,
+  });
+  // Clear localStorage
+  localStorage.removeItem('wallet_connected');
+  localStorage.removeItem('wallet_account');
+  localStorage.removeItem('wallet_type');
+};
+```
+
+## Example: Connecting a Wallet
+
+```tsx
+import { useWallet } from '@/contexts/WalletContext';
+
+export function MyWalletButton() {
+  const { setWallet } = useWallet();
+  
+  const handleConnect = async () => {
+    // After successful wallet connection
+    setWallet({
+      accountId: '0.0.12345',
+      balance: '100.00',
+      isConnected: true,
+      provider: walletProvider,
+      walletType: 'walletconnect'
+    });
+    
+    // Persist to localStorage
+    localStorage.setItem('wallet_connected', 'true');
+    localStorage.setItem('wallet_account', '0.0.12345');
+    localStorage.setItem('wallet_type', 'walletconnect');
+  };
+  
+  return <button onClick={handleConnect}>Connect</button>;
+}
+```
+
+## Related
+
+- [useWallet hook](/api/use-wallet) - Hook to access wallet context
+- [WalletConnect component](/components/wallet-connect) - UI component for wallet connection

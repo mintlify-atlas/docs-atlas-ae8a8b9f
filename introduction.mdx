@@ -1,0 +1,100 @@
+---
+title: Introduction
+description: Build blazing-fast Hedera dApps with a modern React stack
+---
+
+# Introduction
+
+The Hedera DX Starter Kit is a production-ready Next.js template for building modern Hedera dApps with wallet integration and Mirror Node API access. Get started in minutes with a complete frontend stack that showcases real-time data from the Hedera network.
+
+<Note>
+This starter kit is a modern evolution of Hedera's official WalletConnect tutorial, rebuilt from the ground up with Next.js 15, TypeScript, React 19, and shadcn/ui.
+</Note>
+
+## Key features
+
+The Hedera DX Starter Kit provides everything you need to build a production-ready Hedera dApp:
+
+- **Next.js 15** - Latest App Router with React Server Components
+- **TypeScript** - Full type safety across your entire application
+- **React 19** - Cutting-edge React features and performance
+- **Wallet integration** - MetaMask and HashPack support via WalletConnect
+- **Mirror Node API** - Fast, scalable access to Hedera network data
+- **shadcn/ui** - Beautiful, accessible components built with Radix UI and Tailwind CSS
+- **Dark mode** - Built-in theme support with next-themes
+- **Storybook** - Component development and documentation
+
+## What you'll build
+
+This starter kit includes fully-functional components that you can use as-is or customize:
+
+<CardGroup cols={2}>
+  <Card title="Wallet connection" icon="wallet">
+    Connect to MetaMask or HashPack with automatic network detection and persistent sessions
+  </Card>
+  <Card title="Account details" icon="user">
+    View HBAR balances, token holdings, and account metadata from the Mirror Node
+  </Card>
+  <Card title="Token balances" icon="coins">
+    Display HTS token balances with rich metadata including decimals and token info
+  </Card>
+  <Card title="Transaction history" icon="clock">
+    Browse recent transactions with deep links to HashScan explorer
+  </Card>
+  <Card title="API playground" icon="code">
+    Interactive tool to explore Mirror Node REST API endpoints
+  </Card>
+  <Card title="Interactive tutorial" icon="book-open">
+    Step-by-step guide to working with Mirror Node patterns
+  </Card>
+</CardGroup>
+
+## Architecture
+
+The Hedera DX Starter Kit uses a client-first architecture that delivers instant performance:
+
+- **No backend required** - All data fetched directly from Mirror Node REST API
+- **Wallet-based security** - Private keys never leave your wallet
+- **Fast and scalable** - Mirror Node handles all network queries
+- **Zero deployment friction** - Deploy to Vercel, Netlify, or any static host
+
+```typescript
+import { MirrorNodeService } from '@/services/MirrorNodeService';
+
+const mirror = MirrorNodeService.getInstance();
+const info = await mirror.getAccountInfo('0.0.1234');
+const tokens = await mirror.getAccountTokenBalancesWithInfo('0.0.1234');
+const txs = await mirror.getAccountTransactions('0.0.1234', 10);
+```
+
+## Get started
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get up and running in under 5 minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Complete installation and setup guide
+  </Card>
+  <Card title="Mirror Node guide" icon="database" href="/concepts/mirror-node">
+    Learn how to query Hedera network data
+  </Card>
+  <Card title="Wallet integration" icon="plug" href="/concepts/wallet-integration">
+    Add wallet connection to your app
+  </Card>
+</CardGroup>
+
+## What you'll learn
+
+By exploring this starter kit, you'll learn how to:
+
+1. Connect wallets (MetaMask and HashPack) and detect active accounts
+2. Query account information from the Mirror Node API
+3. Display token balances with complete metadata
+4. Show transaction history with proper formatting
+5. Handle EVM addresses and Hedera account IDs
+6. Build production-ready UI with shadcn/ui components
+
+## Next steps
+
+Ready to start building? Jump into the [Quickstart](/quickstart) guide to get your development environment set up in minutes.

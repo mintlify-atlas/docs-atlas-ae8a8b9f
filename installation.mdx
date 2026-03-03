@@ -1,0 +1,334 @@
+---
+title: Installation
+description: Complete installation and setup guide for Hedera DX Starter Kit
+---
+
+# Installation
+
+This guide covers everything you need to know to set up the Hedera DX Starter Kit in your development environment.
+
+## Prerequisites
+
+Before installing the Hedera DX Starter Kit, ensure you have the following:
+
+### Required
+
+- **Node.js 18 or higher** - [Download from nodejs.org](https://nodejs.org/)
+- **npm, yarn, pnpm, or bun** - Package manager (npm comes with Node.js)
+- **Git** - For cloning the repository
+
+### Recommended
+
+- **HashPack wallet** - [Install from hashpack.app](https://www.hashpack.app/)
+  - After installation, create or import an **ECDSA account** for WalletConnect compatibility
+  - ED25519 accounts are not compatible with WalletConnect
+- **MetaMask** (alternative) - [Install from metamask.io](https://metamask.io/)
+- **Testnet HBAR** - Get free testnet HBAR from the [Hedera portal](https://portal.hedera.com/)
+
+<Note>
+**First time with HashPack?** After installing the HashPack extension or mobile app, you'll need to create a new account or import an existing one. Make sure to select "ECDSA" as the key type when creating your account.
+</Note>
+
+## Installation steps
+
+<Steps>
+  <Step title="Clone the repository">
+    Clone the Hedera DX Starter Kit repository to your local machine:
+
+    ```bash
+    git clone https://github.com/your-org/hedera-dx-starter.git
+    cd hedera-dx-starter/frontend
+    ```
+
+    Or download the ZIP file and extract it.
+  </Step>
+
+  <Step title="Install dependencies">
+    Install all required npm packages:
+
+    <CodeGroup>
+    ```bash npm
+    npm install
+    ```
+
+    ```bash yarn
+    yarn install
+    ```
+
+    ```bash pnpm
+    pnpm install
+    ```
+
+    ```bash bun
+    bun install
+    ```
+    </CodeGroup>
+
+    This installs all dependencies from `package.json`, including:
+
+    - `next@15.4.6` - Next.js framework
+    - `react@19.1.0` and `react-dom@19.1.0` - React library
+    - `@hashgraph/sdk@^2.47.0` - Hedera JavaScript SDK
+    - `@walletconnect/ethereum-provider@^2.11.0` - WalletConnect integration
+    - `hashconnect@^3.0.13` - HashConnect library
+    - `ethers@^6.8.0` - Ethereum JavaScript library
+    - `shadcn/ui` components via `class-variance-authority`, `clsx`, `tailwind-merge`
+    - `lucide-react@^0.539.0` - Icon library
+  </Step>
+
+  <Step title="Configure environment variables (optional)">
+    The starter kit works with default configuration, but you can customize it by creating a `.env.local` file in the frontend directory:
+
+    ```bash
+    touch .env.local
+    ```
+
+    Add the following environment variables:
+
+    ```bash .env.local
+    # Network configuration (testnet or mainnet)
+    NEXT_PUBLIC_NETWORK=testnet
+
+    # Mirror Node URL (optional - defaults shown below)
+    NEXT_PUBLIC_MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
+
+    # WalletConnect Project ID (optional - a default is provided)
+    NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=8574f21c5a6d1d30e8a857f9793bdf2e
+    ```
+
+    <Note>
+    All environment variables are optional. The app uses sensible defaults:
+    - Network: `testnet`
+    - Mirror Node: `https://testnet.mirrornode.hedera.com`
+    - WalletConnect Project ID: Default provided in code
+    </Note>
+  </Step>
+
+  <Step title="Start the development server">
+    Run the development server:
+
+    <CodeGroup>
+    ```bash npm
+    npm run dev
+    ```
+
+    ```bash yarn
+    yarn dev
+    ```
+
+    ```bash pnpm
+    pnpm dev
+    ```
+
+    ```bash bun
+    bun dev
+    ```
+    </CodeGroup>
+
+    The app will start at [http://localhost:3000](http://localhost:3000).
+  </Step>
+
+  <Step title="Verify installation">
+    Open [http://localhost:3000](http://localhost:3000) in your browser. You should see:
+
+    - The Hedera dApp Starter homepage
+    - Wallet connection buttons
+    - API Playground component
+
+    Try connecting your wallet to verify everything works correctly.
+  </Step>
+</Steps>
+
+## Environment variables reference
+
+Here's a complete reference of all environment variables used by the Hedera DX Starter Kit:
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `NEXT_PUBLIC_NETWORK` | Hedera network to connect to (`testnet` or `mainnet`) | `testnet` | No |
+| `NEXT_PUBLIC_MIRROR_NODE_URL` | Mirror Node REST API endpoint | `https://testnet.mirrornode.hedera.com` | No |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | WalletConnect Cloud project ID | Built-in default | No |
+
+<Note>
+All environment variables are prefixed with `NEXT_PUBLIC_` to make them available in the browser. Never store secrets or API keys in these variables.
+</Note>
+
+## Project structure
+
+After installation, your project structure will look like this:
+
+```
+hedera-dx-starter/
+└── frontend/
+    ├── src/
+    │   ├── app/
+    │   │   ├── page.tsx              # Homepage
+    │   │   ├── layout.tsx            # Root layout
+    │   │   └── tutorial/
+    │   │       └── page.tsx          # Tutorial page
+    │   ├── components/
+    │   │   ├── WalletConnect.tsx     # Wallet connection component
+    │   │   ├── AccountDetails.tsx    # Account data display
+    │   │   ├── ApiPlayground.tsx     # Mirror Node API explorer
+    │   │   ├── TokenRow.tsx          # Token balance row
+    │   │   ├── ThemeToggle.tsx       # Dark mode toggle
+    │   │   ├── Providers.tsx         # Context providers
+    │   │   └── ui/
+    │   │       └── Button.tsx        # shadcn/ui Button
+    │   ├── contexts/
+    │   │   └── WalletContext.tsx     # Wallet state management
+    │   ├── services/
+    │   │   ├── MirrorNodeService.ts  # Mirror Node API client
+    │   │   └── HederaService.ts      # Hedera SDK utilities
+    │   └── lib/
+    │       └── utils.ts              # Utility functions
+    ├── public/
+    │   └── logo.png
+    ├── package.json
+    ├── tsconfig.json
+    ├── tailwind.config.js
+    └── next.config.js
+```
+
+## Available scripts
+
+The following npm scripts are available:
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start development server at http://localhost:3000 |
+| `npm run build` | Build production bundle |
+| `npm run start` | Start production server |
+| `npm run lint` | Run ESLint for code quality |
+| `npm run type-check` | Run TypeScript type checking |
+| `npm run storybook` | Launch Storybook component explorer |
+| `npm run build-storybook` | Build static Storybook site |
+
+## Network configuration
+
+The starter kit can connect to different Hedera networks:
+
+### Testnet (default)
+
+```bash .env.local
+NEXT_PUBLIC_NETWORK=testnet
+NEXT_PUBLIC_MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
+```
+
+- Free testnet HBAR available from [Hedera Portal](https://portal.hedera.com/)
+- Safe for development and testing
+- No real value at risk
+
+### Mainnet
+
+```bash .env.local
+NEXT_PUBLIC_NETWORK=mainnet
+NEXT_PUBLIC_MIRROR_NODE_URL=https://mainnet.mirrornode.hedera.com
+```
+
+- Production network with real HBAR
+- Requires mainnet wallet and funds
+- Use for production deployments only
+
+<Warning>
+When switching networks, make sure your wallet is also connected to the same network. MetaMask users will need to add the correct network configuration.
+</Warning>
+
+## Troubleshooting
+
+Here are solutions to common installation issues:
+
+### Node version errors
+
+```
+Error: The engine "node" is incompatible with this module
+```
+
+**Solution**: Upgrade to Node.js 18 or higher. Check your version:
+
+```bash
+node --version
+```
+
+### Module not found errors
+
+```
+Module not found: Can't resolve '@/components/...'
+```
+
+**Solution**: Delete `node_modules` and reinstall:
+
+```bash
+rm -rf node_modules .next
+npm install
+```
+
+### Wallet connection fails
+
+**For HashPack**:
+- Ensure you have created an **ECDSA account** (not ED25519)
+- Update to the latest HashPack version
+- Check that you're on the correct network (testnet/mainnet)
+
+**For MetaMask**:
+- The app will automatically add Hedera Testnet to MetaMask
+- Make sure you approve the network addition
+- Verify you're connected to Hedera network in MetaMask
+
+### Port already in use
+
+```
+Port 3000 is already in use
+```
+
+**Solution**: Stop other processes on port 3000, or run on a different port:
+
+```bash
+PORT=3001 npm run dev
+```
+
+### No data showing after wallet connection
+
+**Solution**:
+- Verify you're connected to testnet
+- Check that your account has testnet HBAR
+- Confirm Mirror Node URL is accessible
+- Check browser console for API errors
+
+### Build fails in production
+
+**Solution**: Run type checking to find TypeScript errors:
+
+```bash
+npm run type-check
+```
+
+Fix any type errors before building.
+
+## Next steps
+
+Now that you have the Hedera DX Starter Kit installed:
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Follow the quickstart guide to connect your wallet
+  </Card>
+  <Card title="Mirror Node guide" icon="database" href="/concepts/mirror-node">
+    Learn how to query Hedera network data
+  </Card>
+  <Card title="Components" icon="blocks" href="/components/wallet-connect">
+    Explore the pre-built components
+  </Card>
+  <Card title="Wallet integration" icon="wallet" href="/concepts/wallet-integration">
+    Learn about wallet connection
+  </Card>
+</CardGroup>
+
+## Getting help
+
+If you need assistance:
+
+- Check the [Troubleshooting section](#troubleshooting) above
+- Read the [Hedera documentation](https://docs.hedera.com)
+- Open an issue on [GitHub](https://github.com/your-org/hedera-dx-starter)
+- Join the [Hedera Discord](https://hedera.com/discord)

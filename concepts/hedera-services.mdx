@@ -1,0 +1,478 @@
+---
+title: "Hedera Services"
+description: "Overview of Hedera SDK integration for transactions"
+---
+
+## Overview
+
+The `HederaService` class prepares transactions using the official Hedera JavaScript SDK. Unlike the Mirror Node service which reads data, this service **prepares write operations** (transfers, token creation, etc.) for wallet signing.
+
+<Note>
+  This starter kit focuses on **read-heavy Mirror Node operations**. Transaction preparation is included as a foundation, but actual transaction signing and submission happens in the wallet extension.
+</Note>
+
+## HederaService Architecture
+
+From `src/services/HederaService.ts`:
+
+```tsx
+import {
+  Client,
+  TransferTransaction,
+  TokenCreateTransaction,
+  Hbar,
+  AccountId,
+  TokenType,
+  TokenSupplyType,
+  TransactionId,
+  Transaction,
+} from '@hashgraph/sdk';
+
+export class HederaService {
+  private static instance: HederaService;
+  public client: Client;
+
+  private constructor() {
+    this.client = Client.forTestnet();
+  }
+
+  public static getInstance(): HederaService {
+    if (!HederaService.instance) {
+      HederaService.instance = new HederaService();
+    }
+    return HederaService.instance;
+  }
+}
+```
+
+### Singleton Pattern
+
+Like `MirrorNodeService`, this uses a singleton to:
+- Maintain a single `Client` instance
+- Share configuration across the app
+- Reduce memory overhead
+
+### Client Configuration
+
+The `Client.forTestnet()` configures:
+- Testnet consensus nodes
+- Default network settings
+- Retry policies
+
+For mainnet, use `Client.forMainnet()`.
+
+## Transaction Preparation Flow
+
+All transaction methods follow this pattern:
+
+1. **Create Transaction**: Instantiate SDK transaction object
+2. **Set Parameters**: Configure transaction-specific fields
+3. **Freeze Transaction**: Lock transaction for signing (via `prepareTransactionList`)
+4. **Serialize to Base64**: Convert to wallet-compatible format
+5. **Return to Wallet**: App sends to wallet extension for user signing
+
+### Prepare Transaction List
+
+Core method that prepares any transaction for wallet signing:
+
+```tsx
+private async prepareTransactionList(
+  transaction: Transaction,
+  signerAccountId: string
+): Promise<string[]> {
+  const nodeAccountIds = [new AccountId(3)];
+  transaction.setNodeAccountIds(nodeAccountIds);
+  transaction.setTransactionId(TransactionId.generate(signerAccountId));
+  
+  await transaction.freezeWith(this.client);
+
+  const txBytes = transaction.toBytes();
+  const txBase64 = Buffer.from(txBytes).toString('base64');
+  
+  return [txBase64];
+}
+```
+
+**Key Steps**:
+
+1. **Set Node Account IDs**: Transaction routes to node `0.0.3` (testnet node)
+2. **Generate Transaction ID**: Creates unique ID from signer account + timestamp
+3. **Freeze Transaction**: Makes transaction immutable and ready for signing
+4. **Serialize to Bytes**: Converts transaction to protobuf byte array
+5. **Encode to Base64**: Wallet-compatible string format
+6. **Return as Array**: WalletConnect expects array of transaction strings
+
+<Info>
+  Freezing a transaction locks all its fields. After freezing, the transaction cannot be modified - only signed and executed.
+</Info>
+
+## Send HBAR Transaction
+
+Prepares an HBAR transfer between accounts:
+
+```tsx
+public async sendHbar(
+  fromAccountId: string,
+  toAccountId: string,
+  amount: number
+): Promise<string[]> {
+  const transferTransaction = new TransferTransaction()
+    .addHbarTransfer(toAccountId, new Hbar(amount))
+    .addHbarTransfer(fromAccountId, new Hbar(-amount));
+
+  return this.prepareTransactionList(transferTransaction, fromAccountId);
+}
+```
+
+### How It Works
+
+**Parameters**:
+- `fromAccountId`: Sender's account ID (also the transaction payer)
+- `toAccountId`: Recipient's account ID
+- `amount`: HBAR amount (not tinybars - SDK handles conversion)
+
+**Transaction Logic**:
+```tsx
+.addHbarTransfer(toAccountId, new Hbar(amount))    // Credit recipient
+.addHbarTransfer(fromAccountId, new Hbar(-amount))  // Debit sender
+```
+
+Hedera transactions use a **balance-neutral transfer list**:
+- Sum of all transfers must equal zero
+- Negative amounts = debits
+- Positive amounts = credits
+
+**Example**:
+```tsx
+const hedera = HederaService.getInstance();
+const txBase64 = await hedera.sendHbar(
+  '0.0.12345',  // From
+  '0.0.67890',  // To
+  10            // 10 HBAR
+);
+
+// Send txBase64[0] to wallet for signing
+```
+
+## Create Token Transaction
+
+Prepares a fungible token creation:
+
+```tsx
+public async createToken(
+  accountId: string,
+  name: string,
+  symbol: string,
+  initialSupply: number,
+  decimals: number
+): Promise<string[]> {
+  const tokenCreateTransaction = new TokenCreateTransaction()
+    .setTokenName(name)
+    .setTokenSymbol(symbol)
+    .setTokenType(TokenType.FungibleCommon)
+    .setSupplyType(TokenSupplyType.Infinite)
+    .setInitialSupply(initialSupply)
+    .setDecimals(decimals)
+    .setTreasuryAccountId(accountId);
+
+  return this.prepareTransactionList(tokenCreateTransaction, accountId);
+}
+```
+
+### Token Configuration
+
+**Parameters**:
+- `accountId`: Treasury account (receives initial supply)
+- `name`: Full token name (e.g., "My Token")
+- `symbol`: Token symbol (e.g., "MTK")
+- `initialSupply`: Initial supply in smallest units
+- `decimals`: Number of decimal places
+
+**Token Properties**:
+```tsx
+.setTokenType(TokenType.FungibleCommon)      // Fungible token (divisible)
+.setSupplyType(TokenSupplyType.Infinite)     // No max supply limit
+.setTreasuryAccountId(accountId)            // Treasury receives initial supply
+```
+
+**Example**:
+```tsx
+const hedera = HederaService.getInstance();
+const txBase64 = await hedera.createToken(
+  '0.0.12345',     // Treasury account
+  'My Token',      // Name
+  'MTK',           // Symbol
+  1000000,         // 1,000,000 smallest units
+  2                // 2 decimals = 10,000.00 MTK
+);
+
+// Send txBase64[0] to wallet for signing
+```
+
+<Warning>
+  Token creation costs approximately **$1 USD in HBAR** on testnet (free HBAR from portal.hedera.com). On mainnet, the fee is paid in real HBAR.
+</Warning>
+
+## Get Account Balance
+
+Queries account balance directly from consensus nodes:
+
+```tsx
+public async getAccountBalance(accountId: string): Promise<string> {
+  try {
+    const balance = await this.client.getAccountBalance(AccountId.fromString(accountId));
+    return balance.hbars.toString();
+  } catch (error) {
+    console.error('Error getting account balance:', error);
+    return '0';
+  }
+}
+```
+
+<Note>
+  This queries **consensus nodes**, not Mirror Node. Mirror Node is generally preferred for balance queries as it doesn't count toward consensus node rate limits.
+</Note>
+
+**Returns**: Balance string like `"1234.56 ℏ"`
+
+## Client Management
+
+Close the client when done (rarely needed in browser apps):
+
+```tsx
+public close(): void {
+  this.client.close();
+}
+```
+
+## Wallet Integration
+
+The prepared transactions are sent to wallets for signing. Here's a complete flow:
+
+```tsx
+import { HederaService } from '@/services/HederaService';
+import { useWallet } from '@/contexts/WalletContext';
+
+function SendHbarButton() {
+  const { wallet } = useWallet();
+  const hedera = HederaService.getInstance();
+  
+  async function handleSend() {
+    try {
+      // 1. Prepare transaction
+      const txBase64Array = await hedera.sendHbar(
+        wallet.accountId,
+        '0.0.67890',
+        10
+      );
+      
+      // 2. Send to wallet for signing
+      if (wallet.walletType === 'walletconnect' && wallet.provider) {
+        const result = await wallet.provider.request({
+          method: 'hedera_signAndExecuteTransaction',
+          params: {
+            transactionList: txBase64Array
+          }
+        });
+        
+        console.log('Transaction successful:', result);
+      }
+    } catch (error) {
+      console.error('Transaction failed:', error);
+    }
+  }
+  
+  return <button onClick={handleSend}>Send 10 HBAR</button>;
+}
+```
+
+### Wallet Methods
+
+<Tabs>
+  <Tab title="WalletConnect / HashPack">
+    ```tsx
+    const result = await provider.request({
+      method: 'hedera_signAndExecuteTransaction',
+      params: {
+        transactionList: txBase64Array
+      }
+    });
+    ```
+    
+    Returns transaction receipt with consensus timestamp.
+  </Tab>
+  
+  <Tab title="MetaMask (EVM)">
+    ```tsx
+    // MetaMask uses standard Ethereum transactions
+    const txHash = await provider.request({
+      method: 'eth_sendTransaction',
+      params: [{
+        from: accountId,
+        to: recipientAddress,
+        value: '0x...',  // Wei format
+      }]
+    });
+    ```
+    
+    Returns Ethereum-style transaction hash.
+  </Tab>
+</Tabs>
+
+## Transaction Types Supported
+
+The Hedera SDK supports many transaction types. This starter includes:
+
+<CardGroup cols={2}>
+  <Card title="HBAR Transfer" icon="money-bill-transfer">
+    Send HBAR between accounts
+    
+    `TransferTransaction`
+  </Card>
+  
+  <Card title="Token Create" icon="plus">
+    Create new fungible tokens
+    
+    `TokenCreateTransaction`
+  </Card>
+</CardGroup>
+
+### Additional Transactions (Not Implemented)
+
+The SDK supports many more operations that you can add:
+
+- `TokenAssociateTransaction` - Associate token with account
+- `TokenMintTransaction` - Mint additional supply
+- `TokenBurnTransaction` - Burn tokens from treasury
+- `TokenTransferTransaction` - Transfer tokens between accounts
+- `AccountCreateTransaction` - Create new accounts
+- `AccountUpdateTransaction` - Update account settings
+- `TopicCreateTransaction` - Create consensus topics
+- `TopicMessageSubmitTransaction` - Submit topic messages
+- `SmartContractCreateTransaction` - Deploy smart contracts
+- `SmartContractExecuteTransaction` - Call contract functions
+
+<Info>
+  See the [Hedera SDK documentation](https://docs.hedera.com/hedera/sdks-and-apis/sdks) for the complete list of transaction types.
+</Info>
+
+## Transaction Fees
+
+All Hedera transactions have fees:
+
+- **HBAR Transfer**: ~$0.0001 USD
+- **Token Create**: ~$1 USD
+- **Token Transfer**: ~$0.001 USD
+- **Smart Contract Call**: Variable (depends on gas)
+
+Fees are automatically deducted from the transaction payer's account.
+
+## Error Handling
+
+Common errors when preparing transactions:
+
+```tsx
+try {
+  const tx = await hedera.sendHbar(from, to, amount);
+} catch (error) {
+  if (error.message.includes('INSUFFICIENT_ACCOUNT_BALANCE')) {
+    // Not enough HBAR for transfer + fee
+  } else if (error.message.includes('INVALID_ACCOUNT_ID')) {
+    // Malformed account ID
+  } else {
+    // Other errors
+  }
+}
+```
+
+## Network Configuration
+
+### Testnet
+
+```tsx
+this.client = Client.forTestnet();
+```
+
+- Free test HBAR from [portal.hedera.com](https://portal.hedera.com)
+- Safe for development
+- Data may be reset periodically
+
+### Mainnet
+
+```tsx
+this.client = Client.forMainnet();
+```
+
+- Real HBAR costs
+- Permanent data storage
+- Production use
+
+### Custom Network
+
+```tsx
+const client = Client.forNetwork({
+  '0.0.3': '50.18.132.211:50211',
+  '0.0.4': '50.18.132.212:50211',
+});
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always Freeze Before Signing">
+    Never send unfrozen transactions to wallets. Call `freezeWith(client)` first.
+  </Accordion>
+  
+  <Accordion title="Set Transaction ID">
+    Always generate transaction IDs with the signer's account ID for proper fee deduction.
+  </Accordion>
+  
+  <Accordion title="Handle User Rejection">
+    Users can reject transactions in their wallet. Always handle this gracefully.
+  </Accordion>
+  
+  <Accordion title="Verify on Mirror Node">
+    After transaction submission, query Mirror Node to confirm success (1-2 second delay).
+  </Accordion>
+  
+  <Accordion title="Use Testnet First">
+    Always develop and test on testnet before deploying to mainnet.
+  </Accordion>
+</AccordionGroup>
+
+## Extending HederaService
+
+Add new transaction types by following the existing pattern:
+
+```tsx
+public async associateToken(
+  accountId: string,
+  tokenId: string
+): Promise<string[]> {
+  const associateTransaction = new TokenAssociateTransaction()
+    .setAccountId(accountId)
+    .setTokenIds([tokenId]);
+
+  return this.prepareTransactionList(associateTransaction, accountId);
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Mirror Node" icon="database" href="/concepts/mirror-node">
+    Learn about reading blockchain data
+  </Card>
+  
+  <Card title="Hedera SDK Docs" icon="book" href="https://docs.hedera.com/hedera/sdks-and-apis/sdks/transactions">
+    Complete SDK transaction reference
+  </Card>
+  
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Build your first Hedera dApp
+  </Card>
+  
+  <Card title="Architecture" icon="sitemap" href="/concepts/architecture">
+    Understand the full system architecture
+  </Card>
+</CardGroup>

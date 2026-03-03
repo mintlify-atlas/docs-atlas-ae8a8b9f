@@ -1,0 +1,105 @@
+---
+title: Components overview
+description: UI components included in the Hedera DX Starter Kit
+---
+
+The Hedera DX Starter Kit includes a comprehensive set of React components built with Next.js 15 and TypeScript. These components provide ready-to-use UI elements for building Hedera dApps.
+
+## Component Foundation
+
+All components are built on a solid foundation:
+
+- **shadcn/ui philosophy**: Components follow shadcn/ui patterns - they're owned by you, not installed as dependencies
+- **Tailwind CSS**: Styled with Tailwind utility classes for easy customization
+- **TypeScript**: Fully typed for better developer experience
+- **Accessibility**: Built with semantic HTML and ARIA labels
+- **Dark mode**: All components support light/dark themes via `next-themes`
+
+## Core Components
+
+<CardGroup cols={2}>
+  <Card title="WalletConnect" icon="wallet" href="/components/wallet-connect">
+    Connect to Hedera wallets via WalletConnect or MetaMask
+  </Card>
+  
+  <Card title="AccountDetails" icon="user" href="/components/account-details">
+    Display account information, token balances, and transaction history
+  </Card>
+  
+  <Card title="ApiPlayground" icon="code" href="/components/api-playground">
+    Interactive playground for testing Mirror Node API endpoints
+  </Card>
+  
+  <Card title="TokenRow" icon="coins">
+    Display individual token balance information
+  </Card>
+</CardGroup>
+
+## UI Components
+
+The starter kit includes foundational UI components in `src/components/ui/`:
+
+- **Button**: Flexible button component with multiple variants (`default`, `outline`, `ghost`) and sizes
+- **ThemeToggle**: Toggle between light and dark themes
+
+## Storybook Integration
+
+All major components include Storybook stories for interactive development and documentation:
+
+```bash
+npm run storybook
+```
+
+Storybook stories are available for:
+- `WalletConnect`
+- `AccountDetails`
+- `ApiPlayground`
+- `TokenRow`
+
+This allows you to develop and test components in isolation before integrating them into your application.
+
+## Component Architecture
+
+### State Management
+
+Components use React Context for global state:
+
+- `WalletContext`: Manages wallet connection state across the app
+- `ThemeProvider`: Handles theme switching (light/dark mode)
+
+### Service Integration
+
+Components integrate with service layers:
+
+- `MirrorNodeService`: Fetches account data, token balances, and transactions
+- Wallet providers: Handle connection to MetaMask and WalletConnect
+
+### Styling Utilities
+
+The `cn()` utility function (from `tailwind-merge` and `clsx`) is used throughout for conditional className merging:
+
+```typescript
+import { cn } from '@/lib/utils';
+
+className={cn(
+  'base-classes',
+  conditionalClass && 'conditional-classes',
+  className
+)}
+```
+
+## Icons
+
+All components use [Lucide React](https://lucide.dev/) for consistent, customizable icons:
+
+```typescript
+import { Wallet, Coins, History, ExternalLink } from 'lucide-react';
+```
+
+## Next Steps
+
+Explore the detailed documentation for each component:
+
+- [WalletConnect component](/components/wallet-connect) - Wallet connection UI
+- [AccountDetails component](/components/account-details) - Account information display
+- [ApiPlayground component](/components/api-playground) - Mirror Node API testing

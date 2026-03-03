@@ -1,0 +1,379 @@
+---
+title: "Wallet Integration"
+description: "How wallet connection works with MetaMask and HashPack"
+---
+
+## Overview
+
+The Hedera DX Starter Kit supports two wallet connection methods:
+
+1. **WalletConnect** - for HashPack and other WalletConnect-compatible wallets
+2. **MetaMask** - direct browser extension integration
+
+Both wallets connect to Hedera's EVM-compatible JSON-RPC interface, allowing ECDSA accounts to sign transactions.
+
+## ECDSA Account Requirement
+
+<Warning>
+  **Important**: This starter kit requires an **ECDSA account** (Ethereum-compatible), not an ED25519 account. HashPack users must create or import an ECDSA account before connecting.
+</Warning>
+
+Hedera supports two key types:
+- **ED25519**: Native Hedera key type (account IDs like `0.0.12345`)
+- **ECDSA**: Ethereum-compatible keys (EVM addresses like `0xabc...`)
+
+This starter uses ECDSA to enable compatibility with standard Ethereum wallets like MetaMask.
+
+## WalletContext Architecture
+
+Wallet state is managed globally through React Context, making the connected wallet accessible throughout the app.
+
+### Context Definition
+
+From `src/contexts/WalletContext.tsx`:
+
+```tsx
+interface WalletContextType {
+  wallet: WalletInfo;
+  setWallet: (wallet: WalletInfo) => void;
+  disconnectWallet: () => void;
+}
+
+const WalletContext = createContext<WalletContextType | undefined>(undefined);
+
+export function WalletProvider({ children }: { children: ReactNode }) {
+  const [wallet, setWallet] = useState<WalletInfo>({
+    accountId: '',
+    balance: '',
+    isConnected: false,
+  });
+
+  const disconnectWallet = () => {
+    setWallet({
+      accountId: '',
+      balance: '',
+      isConnected: false,
+    });
+    // Clear localStorage
+    localStorage.removeItem('wallet_connected');
+    localStorage.removeItem('wallet_account');
+    localStorage.removeItem('wallet_type');
+  };
+
+  return (
+    <WalletContext.Provider value={{ wallet, setWallet, disconnectWallet }}>
+      {children}
+    </WalletContext.Provider>
+  );
+}
+```
+
+### Using the Context
+
+Any component can access wallet state:
+
+```tsx
+import { useWallet } from '@/contexts/WalletContext';
+
+function MyComponent() {
+  const { wallet, setWallet, disconnectWallet } = useWallet();
+  
+  if (wallet.isConnected) {
+    return <div>Connected: {wallet.accountId}</div>;
+  }
+  
+  return <div>Not connected</div>;
+}
+```
+
+## WalletConnect Integration
+
+### Initialization
+
+WalletConnect is initialized with the Hedera Testnet configuration:
+
+```tsx
+const provider = await EthereumProvider.init({
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '8574f21c5a6d1d30e8a857f9793bdf2e',
+  chains: [296], // Hedera Testnet chain ID
+  showQrModal: true,
+  metadata: {
+    name: 'Hedera DX Starter Kit',
+    description: 'Modern Hedera dApp development kit',
+    url: 'http://localhost:3000',
+    icons: ['https://walletconnect.com/walletconnect-logo.png']
+  }
+});
+```
+
+### Connection Flow
+
+From `src/components/WalletConnect.tsx:14-61`:
+
+```tsx
+const handleConnectWalletConnect = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    const provider = await EthereumProvider.init({
+      projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '8574f21c5a6d1d30e8a857f9793bdf2e',
+      chains: [296], // Hedera Testnet
+      showQrModal: true,
+      metadata: {
+        name: 'Hedera DX Starter Kit',
+        description: 'Modern Hedera dApp development kit',
+        url: 'http://localhost:3000',
+        icons: ['https://walletconnect.com/walletconnect-logo.png']
+      }
+    });
+
+    await provider.enable();
+    
+    const accounts = await provider.request({ method: 'eth_accounts' });
+    if (accounts && accounts.length > 0) {
+      const accountId = accounts[0];
+      
+      setWallet({
+        accountId: accountId,
+        balance: '0.00',
+        isConnected: true,
+        provider,
+        walletType: 'walletconnect'
+      });
+
+      localStorage.setItem('wallet_connected', 'true');
+      localStorage.setItem('wallet_account', accountId);
+      localStorage.setItem('wallet_type', 'walletconnect');
+      
+      window.dispatchEvent(new CustomEvent('walletConnected', { detail: { accountId } }));
+    }
+  } catch (error) {
+    console.error('WalletConnect connection error:', error);
+    if (error instanceof Error && error.message.includes('User rejected')) {
+      setError('Connection cancelled by user');
+    } else {
+      setError('Failed to connect with WalletConnect. Please ensure HashPack is installed and an ECDSA account is available.');
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+### Key Points
+
+1. **Provider Initialization**: Creates WalletConnect provider with Hedera chain 296
+2. **Enable Provider**: Shows QR code modal for wallet scanning
+3. **Get Accounts**: Retrieves connected ECDSA account address
+4. **Store State**: Saves connection to both React state and localStorage
+5. **Event Dispatch**: Notifies other components of successful connection
+
+## MetaMask Integration
+
+### Network Configuration
+
+MetaMask needs to be configured with Hedera Testnet network details:
+
+```tsx
+const handleConnectMetaMask = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    if (typeof window !== 'undefined' && window.ethereum) {
+      try {
+        // Add Hedera testnet to MetaMask
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x128', // 296 in hex
+            chainName: 'Hedera Testnet',
+            rpcUrls: ['https://testnet.hashio.io/api'],
+            nativeCurrency: {
+              name: 'HBAR',
+              symbol: 'HBAR',
+              decimals: 18,
+            },
+            blockExplorerUrls: ['https://hashscan.io/testnet'],
+          }],
+        });
+      } catch (error) {
+        console.log('Network already added or user rejected');
+      }
+
+      const accounts = await window.ethereum.request({
+        method: 'eth_requestAccounts',
+      });
+
+      if (accounts && accounts.length > 0) {
+        const account = accounts[0];
+        setWallet({
+          accountId: account,
+          balance: '0.00',
+          isConnected: true,
+          provider: window.ethereum,
+          walletType: 'metamask'
+        });
+
+        localStorage.setItem('wallet_connected', 'true');
+        localStorage.setItem('wallet_account', account);
+        localStorage.setItem('wallet_type', 'metamask');
+        
+        window.dispatchEvent(new CustomEvent('walletConnected', { detail: { accountId: account } }));
+      }
+    } else {
+      setError('MetaMask is not installed. Please install MetaMask.');
+    }
+  } catch (error) {
+    console.error('MetaMask connection error:', error);
+    setError('Failed to connect with MetaMask');
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+### Hedera Testnet Network Parameters
+
+- **Chain ID**: `0x128` (296 in decimal)
+- **RPC URL**: `https://testnet.hashio.io/api`
+- **Currency**: HBAR with 18 decimals
+- **Explorer**: `https://hashscan.io/testnet`
+
+## Wallet Detection
+
+The app detects wallet availability before attempting connection:
+
+```tsx
+declare global {
+  interface Window {
+    ethereum?: any;
+  }
+}
+```
+
+### MetaMask Detection
+
+```tsx
+if (typeof window !== 'undefined' && window.ethereum) {
+  // MetaMask is available
+} else {
+  setError('MetaMask is not installed. Please install MetaMask.');
+}
+```
+
+### WalletConnect Detection
+
+WalletConnect doesn't require detection - it works via QR code scanning. If the user doesn't have a compatible wallet, they won't be able to complete the QR scan.
+
+## Persistence & Auto-Reconnect
+
+Wallet connections persist across page refreshes using localStorage:
+
+```tsx
+useEffect(() => {
+  const isConnected = localStorage.getItem('wallet_connected');
+  const account = localStorage.getItem('wallet_account');
+  const type = localStorage.getItem('wallet_type');
+  
+  if (isConnected && account && type === 'walletconnect') {
+    handleConnectWalletConnect();
+  }
+}, []);
+```
+
+This automatically reconnects WalletConnect sessions when the user returns to the app.
+
+## Disconnection
+
+Disconnecting clears both React state and localStorage:
+
+```tsx
+const disconnectWallet = () => {
+  setWallet({
+    accountId: '',
+    balance: '',
+    isConnected: false,
+  });
+  localStorage.removeItem('wallet_connected');
+  localStorage.removeItem('wallet_account');
+  localStorage.removeItem('wallet_type');
+};
+```
+
+## Connected UI
+
+When connected, the component shows account info with HashScan link:
+
+```tsx
+if (wallet.isConnected && wallet.accountId) {
+  return (
+    <div className="bg-card border border-border rounded-lg p-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="p-2 bg-primary/10 rounded-full">
+            <Wallet className="h-4 w-4 text-primary" />
+          </div>
+          <div>
+            <p className="font-medium text-card-foreground">Wallet Connected</p>
+            <p className="text-sm text-muted-foreground font-mono">
+              {wallet.accountId}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.open(`https://hashscan.io/testnet/account/${wallet.accountId}`, '_blank')}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleDisconnect}>
+            Disconnect
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+## Account ID Formats
+
+<Note>
+  Connected wallets return **EVM addresses** (like `0xabc123...`), not native Hedera account IDs (like `0.0.12345`). The Mirror Node API handles both formats automatically.
+</Note>
+
+Example conversion:
+- **EVM Address**: `0x1234567890abcdef1234567890abcdef12345678`
+- **Hedera Account ID**: `0.0.12345` (fetched from Mirror Node)
+
+The `MirrorNodeService` handles this conversion automatically when querying account data.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Always Check Connection" icon="circle-check">
+    Check `wallet.isConnected` before showing wallet-dependent UI
+  </Card>
+  
+  <Card title="Handle Errors Gracefully" icon="triangle-exclamation">
+    User might reject connection or not have an ECDSA account
+  </Card>
+  
+  <Card title="Persist Connection" icon="floppy-disk">
+    Use localStorage to auto-reconnect on page refresh
+  </Card>
+  
+  <Card title="Clear Error States" icon="eraser">
+    Reset errors when user retries connection
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Mirror Node Integration" icon="database" href="/concepts/mirror-node">
+  Learn how to fetch account data using the connected wallet
+</Card>

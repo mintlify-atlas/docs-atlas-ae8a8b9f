@@ -1,0 +1,302 @@
+---
+title: 'Connect a wallet'
+description: 'Step-by-step guide to integrating wallet connection in your dApp'
+---
+
+This guide shows you how to integrate wallet connection in your Hedera dApp using both MetaMask and WalletConnect protocols.
+
+## Prerequisites
+
+Before implementing wallet connection, ensure you have:
+
+- A Next.js 15 application set up
+- `@walletconnect/ethereum-provider` package installed
+- A WalletConnect project ID (get one at [WalletConnect Cloud](https://cloud.walletconnect.com))
+
+## Implementation
+
+<Steps>
+  <Step title="Set up the Wallet Context">
+    Create a context to manage wallet state across your application. This provides a centralized way to access wallet information.
+
+    ```typescript src/contexts/WalletContext.tsx
+    'use client';
+
+    import React, { createContext, useContext, useState, ReactNode } from 'react';
+
+    interface WalletInfo {
+      accountId: string;
+      balance: string;
+      isConnected: boolean;
+      provider?: any;
+      walletType?: 'metamask' | 'walletconnect';
+    }
+
+    interface WalletContextType {
+      wallet: WalletInfo;
+      setWallet: (wallet: WalletInfo) => void;
+      disconnectWallet: () => void;
+    }
+
+    const WalletContext = createContext<WalletContextType | undefined>(undefined);
+
+    export function WalletProvider({ children }: { children: ReactNode }) {
+      const [wallet, setWallet] = useState<WalletInfo>({
+        accountId: '',
+        balance: '',
+        isConnected: false,
+      });
+
+      const disconnectWallet = () => {
+        setWallet({
+          accountId: '',
+          balance: '',
+          isConnected: false,
+        });
+        // Clear localStorage
+        localStorage.removeItem('wallet_connected');
+        localStorage.removeItem('wallet_account');
+        localStorage.removeItem('wallet_type');
+      };
+
+      return (
+        <WalletContext.Provider value={{ wallet, setWallet, disconnectWallet }}>
+          {children}
+        </WalletContext.Provider>
+      );
+    }
+
+    export function useWallet() {
+      const context = useContext(WalletContext);
+      if (context === undefined) {
+        throw new Error('useWallet must be used within a WalletProvider');
+      }
+      return context;
+    }
+    ```
+
+    Wrap your application with the `WalletProvider` in your root layout.
+  </Step>
+
+  <Step title="Connect with WalletConnect">
+    Implement WalletConnect integration to support wallets like HashPack:
+
+    ```typescript src/components/WalletConnect.tsx
+    import EthereumProvider from '@walletconnect/ethereum-provider';
+    import { useWallet } from '@/contexts/WalletContext';
+
+    const handleConnectWalletConnect = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        const provider = await EthereumProvider.init({
+          projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || '8574f21c5a6d1d30e8a857f9793bdf2e',
+          chains: [296], // Hedera Testnet
+          showQrModal: true,
+          metadata: {
+            name: 'Hedera DX Starter Kit',
+            description: 'Modern Hedera dApp development kit',
+            url: 'http://localhost:3000',
+            icons: ['https://walletconnect.com/walletconnect-logo.png']
+          }
+        });
+
+        await provider.enable();
+        
+        const accounts = await provider.request({ method: 'eth_accounts' });
+        if (accounts && accounts.length > 0) {
+          const accountId = accounts[0];
+          
+          setWallet({
+            accountId: accountId,
+            balance: '0.00',
+            isConnected: true,
+            provider,
+            walletType: 'walletconnect'
+          });
+
+          localStorage.setItem('wallet_connected', 'true');
+          localStorage.setItem('wallet_account', accountId);
+          localStorage.setItem('wallet_type', 'walletconnect');
+          
+          window.dispatchEvent(new CustomEvent('walletConnected', { detail: { accountId } }));
+        }
+      } catch (error) {
+        console.error('WalletConnect connection error:', error);
+        if (error instanceof Error && error.message.includes('User rejected')) {
+          setError('Connection cancelled by user');
+        } else {
+          setError('Failed to connect with WalletConnect. Please ensure HashPack is installed and an ECDSA account is available.');
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    ```
+
+    <Note>
+      The WalletConnect integration uses chain ID `296` for Hedera Testnet. For mainnet, use chain ID `295`.
+    </Note>
+  </Step>
+
+  <Step title="Connect with MetaMask">
+    Add MetaMask support by adding the Hedera network and requesting accounts:
+
+    ```typescript src/components/WalletConnect.tsx
+    const handleConnectMetaMask = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        if (typeof window !== 'undefined' && window.ethereum) {
+          try {
+            // Add Hedera testnet to MetaMask
+            await window.ethereum.request({
+              method: 'wallet_addEthereumChain',
+              params: [{
+                chainId: '0x128', // 296 in hex
+                chainName: 'Hedera Testnet',
+                rpcUrls: ['https://testnet.hashio.io/api'],
+                nativeCurrency: {
+                  name: 'HBAR',
+                  symbol: 'HBAR',
+                  decimals: 18,
+                },
+                blockExplorerUrls: ['https://hashscan.io/testnet'],
+              }],
+            });
+          } catch (error) {
+            console.log('Network already added or user rejected');
+          }
+
+          const accounts = await window.ethereum.request({
+            method: 'eth_requestAccounts',
+          });
+
+          if (accounts && accounts.length > 0) {
+            const account = accounts[0];
+            setWallet({
+              accountId: account,
+              balance: '0.00',
+              isConnected: true,
+              provider: window.ethereum,
+              walletType: 'metamask'
+            });
+
+            localStorage.setItem('wallet_connected', 'true');
+            localStorage.setItem('wallet_account', account);
+            localStorage.setItem('wallet_type', 'metamask');
+            
+            window.dispatchEvent(new CustomEvent('walletConnected', { detail: { accountId: account } }));
+          }
+        } else {
+          setError('MetaMask is not installed. Please install MetaMask.');
+        }
+      } catch (error) {
+        console.error('MetaMask connection error:', error);
+        setError('Failed to connect with MetaMask');
+      } finally {
+        setLoading(false);
+      }
+    };
+    ```
+
+    <Tip>
+      The code automatically adds the Hedera Testnet network to MetaMask if it's not already configured.
+    </Tip>
+  </Step>
+
+  <Step title="Handle disconnection">
+    Implement a disconnect function that clears wallet state:
+
+    ```typescript
+    const handleDisconnect = () => {
+      disconnectWallet();
+      setError(null);
+    };
+    ```
+
+    The `disconnectWallet` function from the context automatically:
+    - Clears the wallet state
+    - Removes items from localStorage
+    - Resets the connection status
+  </Step>
+
+  <Step title="Use the wallet hook">
+    Access wallet information anywhere in your app using the `useWallet` hook:
+
+    ```typescript
+    import { useWallet } from '@/contexts/WalletContext';
+
+    function MyComponent() {
+      const { wallet, disconnectWallet } = useWallet();
+
+      if (wallet.isConnected) {
+        return (
+          <div>
+            <p>Connected: {wallet.accountId}</p>
+            <p>Type: {wallet.walletType}</p>
+            <button onClick={disconnectWallet}>Disconnect</button>
+          </div>
+        );
+      }
+
+      return <p>Not connected</p>;
+    }
+    ```
+  </Step>
+</Steps>
+
+## Error handling
+
+The implementation includes comprehensive error handling for common scenarios:
+
+```typescript
+try {
+  // Connection logic
+} catch (error) {
+  console.error('WalletConnect connection error:', error);
+  if (error instanceof Error && error.message.includes('User rejected')) {
+    setError('Connection cancelled by user');
+  } else {
+    setError('Failed to connect with WalletConnect. Please ensure HashPack is installed and an ECDSA account is available.');
+  }
+}
+```
+
+<Warning>
+  Always check if the wallet provider exists before attempting to connect, especially for MetaMask:
+  
+  ```typescript
+  if (typeof window !== 'undefined' && window.ethereum) {
+    // Safe to connect
+  } else {
+    setError('MetaMask is not installed. Please install MetaMask.');
+  }
+  ```
+</Warning>
+
+## Persistence
+
+The wallet connection state is persisted to localStorage, allowing users to stay connected across page refreshes:
+
+```typescript
+useEffect(() => {
+  const isConnected = localStorage.getItem('wallet_connected');
+  const account = localStorage.getItem('wallet_account');
+  const type = localStorage.getItem('wallet_type');
+  
+  if (isConnected && account && type === 'walletconnect') {
+    handleConnectWalletConnect();
+  }
+}, []);
+```
+
+## Next steps
+
+Now that you have wallet connection set up, you can:
+
+- [Fetch account data](/guides/fetch-account-data) from the Mirror Node
+- [Display token balances](/guides/token-balances) for connected accounts
+- [View transaction history](/guides/transaction-history) using the Mirror Node API

@@ -1,0 +1,321 @@
+---
+title: 'View transaction history'
+description: 'Query and display account transaction history'
+---
+
+The Mirror Node API provides comprehensive transaction history for any Hedera account. This guide shows you how to fetch and display transaction data with proper formatting and linking to HashScan.
+
+## Overview
+
+Transaction history includes:
+
+- Transaction type and status
+- Consensus timestamp
+- Transaction fees
+- HBAR and token transfers
+- NFT transfers
+- Result codes and messages
+
+## Implementation
+
+<Steps>
+  <Step title="Define the Transaction interface">
+    Create a TypeScript interface matching the Mirror Node transaction structure:
+
+    ```typescript src/services/MirrorNodeService.ts
+    export interface Transaction {
+      bytes?: string;
+      charged_tx_fee: number;
+      consensus_timestamp: string;
+      entity_id?: string;
+      max_fee: string;
+      memo_base64?: string;
+      name: string;
+      nft_transfers?: any[];
+      node: string;
+      nonce: number;
+      parent_consensus_timestamp?: string;
+      result: string;
+      scheduled: boolean;
+      staking_reward_transfers?: any[];
+      token_transfers?: any[];
+      transaction_hash: string;
+      transaction_id: string;
+      transfers: Array<{
+        account: string;
+        amount: number;
+        is_approval?: boolean;
+      }>;
+      valid_duration_seconds: string;
+      valid_start_timestamp: string;
+    }
+    ```
+  </Step>
+
+  <Step title="Fetch transaction history">
+    Implement a method to retrieve transactions for an account:
+
+    ```typescript src/services/MirrorNodeService.ts
+    /**
+     * Get account transactions
+     */
+    async getAccountTransactions(
+      accountId: string, 
+      limit: number = 25
+    ): Promise<Transaction[]> {
+      try {
+        const normalizedId = this.normalizeAccountId(accountId);
+        
+        // If we have an EVM address, we need to first get the account ID
+        let targetAccountId = normalizedId;
+        if (normalizedId.startsWith('0x')) {
+          try {
+            const accountInfo = await this.getAccountInfo(normalizedId);
+            targetAccountId = accountInfo.account;
+          } catch (error) {
+            console.warn('Could not resolve EVM address to account ID:', error);
+            return [];
+          }
+        }
+        
+        const response = await fetch(
+          `${this.baseUrl}/api/v1/transactions?account.id=${targetAccountId}&limit=${limit}&order=desc`
+        );
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch transactions: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        return data.transactions || [];
+      } catch (error) {
+        console.error('Error fetching transactions:', error);
+        throw error;
+      }
+    }
+    ```
+
+    <Note>
+      The `order=desc` parameter returns the most recent transactions first. Use `order=asc` for oldest first.
+    </Note>
+  </Step>
+
+  <Step title="Parse transaction result codes">
+    Create a helper method to interpret transaction results:
+
+    ```typescript src/services/MirrorNodeService.ts
+    /**
+     * Get transaction status message
+     */
+    getTransactionStatus(result: string): { success: boolean; message: string } {
+      switch (result) {
+        case 'SUCCESS':
+          return { success: true, message: 'Transaction successful' };
+        case 'INSUFFICIENT_PAYER_BALANCE':
+          return { success: false, message: 'Insufficient balance' };
+        case 'INVALID_ACCOUNT_ID':
+          return { success: false, message: 'Invalid account ID' };
+        case 'INSUFFICIENT_TX_FEE':
+          return { success: false, message: 'Insufficient transaction fee' };
+        default:
+          return { success: false, message: result.replace(/_/g, ' ').toLowerCase() };
+      }
+    }
+    ```
+
+    This provides user-friendly messages for common result codes.
+  </Step>
+
+  <Step title="Display transaction history">
+    Use the service in your component to show transactions:
+
+    ```typescript src/components/AccountDetails.tsx
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const mirrorNodeService = MirrorNodeService.getInstance();
+
+    const fetchAccountData = useCallback(async () => {
+      if (!wallet.isConnected || !wallet.accountId) return;
+      setLoading(true);
+      try {
+        const results = await Promise.allSettled([
+          mirrorNodeService.getAccountTransactions(wallet.accountId, 10),
+        ]);
+
+        if (results[0].status === 'fulfilled') {
+          setTransactions(Array.isArray(results[0].value) ? results[0].value : []);
+        }
+      } catch (error) {
+        console.error('Error fetching account data:', error);
+      } finally {
+        setLoading(false);
+      }
+    }, [wallet.isConnected, wallet.accountId, mirrorNodeService]);
+
+    const safeTimestampToDate = (ts: string | number | undefined) => {
+      if (!ts) return 'Unknown';
+      const t = typeof ts === 'string' && ts.includes('.') 
+        ? Math.floor(Number(ts.split('.')[0])) 
+        : Number(ts);
+      if (Number.isNaN(t) || t <= 0) return 'Unknown';
+      return new Date(t * 1000).toLocaleString();
+    };
+
+    return (
+      <div className="space-y-4">
+        {transactions.length > 0 ? (
+          transactions.map((tx) => {
+            const status = mirrorNodeService.getTransactionStatus(tx.result);
+            const txKey = tx.transaction_id ?? tx.consensus_timestamp;
+            return (
+              <div key={txKey} className="p-4 bg-muted/50 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <div className={`w-2 h-2 rounded-full ${
+                      status.success ? 'bg-accent' : 'bg-destructive'
+                    }`} />
+                    <span className="font-medium text-foreground">{tx.name}</span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">
+                    {safeTimestampToDate(tx.consensus_timestamp)}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">
+                      Fee: {mirrorNodeService.formatHbar(tx.charged_tx_fee)} HBAR
+                    </p>
+                    <p className="text-xs text-muted-foreground font-mono">{tx.transaction_id}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(
+                      `https://hashscan.io/${mirrorNodeService.network}/transaction/${tx.consensus_timestamp}`,
+                      '_blank'
+                    )}
+                    aria-label="Open transaction on Hashscan"
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            );
+          })
+        ) : (
+          <div className="text-center py-8">
+            <History className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">No transactions found</p>
+          </div>
+        )}
+      </div>
+    );
+    ```
+  </Step>
+
+  <Step title="Link to HashScan explorer">
+    Add links to view full transaction details on HashScan:
+
+    ```typescript
+    const openTransaction = (consensusTimestamp: string, network: string) => {
+      window.open(
+        `https://hashscan.io/${network}/transaction/${consensusTimestamp}`,
+        '_blank'
+      );
+    };
+    ```
+
+    <Tip>
+      Always use the `consensus_timestamp` as the transaction identifier for HashScan links, not the `transaction_id`.
+    </Tip>
+  </Step>
+</Steps>
+
+## Transaction types
+
+Common transaction types you'll encounter:
+
+- `CRYPTOTRANSFER` - HBAR or token transfer
+- `TOKENCREATION` - New token created
+- `TOKENASSOCIATE` - Account associated with token
+- `TOKENDISSOCIATE` - Account dissociated from token
+- `CONTRACTCALL` - Smart contract execution
+- `CONTRACTCREATEINSTANCE` - Smart contract deployment
+- `CRYPTOCREATEACCOUNT` - New account created
+
+## Transaction result codes
+
+Here are the most common result codes:
+
+| Code | Meaning |
+|------|--------|
+| `SUCCESS` | Transaction completed successfully |
+| `INSUFFICIENT_PAYER_BALANCE` | Not enough HBAR to pay fees |
+| `INVALID_ACCOUNT_ID` | Account doesn't exist |
+| `INSUFFICIENT_TX_FEE` | Fee was too low |
+| `INVALID_SIGNATURE` | Transaction not properly signed |
+| `TOKEN_NOT_ASSOCIATED_TO_ACCOUNT` | Must associate token first |
+
+<Warning>
+  A transaction can appear in the Mirror Node even if it failed. Always check the `result` field to determine success.
+</Warning>
+
+## Pagination
+
+For accounts with many transactions, implement pagination:
+
+```typescript
+interface TransactionResponse {
+  transactions: Transaction[];
+  links: {
+    next: string | null;
+  };
+}
+
+async getAccountTransactionsPaginated(
+  accountId: string,
+  limit: number = 25,
+  nextLink?: string
+): Promise<TransactionResponse> {
+  try {
+    const url = nextLink || 
+      `${this.baseUrl}/api/v1/transactions?account.id=${accountId}&limit=${limit}&order=desc`;
+    
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch transactions: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return {
+      transactions: data.transactions || [],
+      links: data.links || { next: null }
+    };
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    throw error;
+  }
+}
+```
+
+## Filtering transactions
+
+The Mirror Node API supports filtering:
+
+```typescript
+// Only successful transactions
+`/api/v1/transactions?account.id=${accountId}&result=success`
+
+// Specific transaction type
+`/api/v1/transactions?account.id=${accountId}&transactionType=CRYPTOTRANSFER`
+
+// Time range
+`/api/v1/transactions?account.id=${accountId}&timestamp=gte:1699999999.0`
+```
+
+## Next steps
+
+- Explore the [Mirror Node REST API](https://docs.hedera.com/hedera/sdks-and-apis/rest-api) documentation
+- Learn about [transaction receipts and records](https://docs.hedera.com/hedera/core-concepts/transactions-and-queries)
+- View [smart contract transactions](https://docs.hedera.com/hedera/core-concepts/smart-contracts) in detail

@@ -1,0 +1,278 @@
+---
+title: WalletConnect component
+description: Wallet connection UI component
+---
+
+The `WalletConnect` component provides a user interface for connecting to Hedera wallets. It supports two connection methods: WalletConnect (for HashPack and other wallets) and MetaMask.
+
+## Overview
+
+Location: `src/components/WalletConnect.tsx`
+
+This component handles the entire wallet connection flow, including:
+- Displaying connection options
+- Managing connection state
+- Persisting wallet sessions to localStorage
+- Showing connected account information
+- Disconnecting wallets
+
+## Usage
+
+```tsx
+import { WalletConnect } from '@/components/WalletConnect';
+
+export default function Page() {
+  return (
+    <div>
+      <WalletConnect />
+    </div>
+  );
+}
+```
+
+The component requires the `WalletProvider` to be wrapped around your app (already configured in the starter kit).
+
+## Props
+
+The `WalletConnect` component does not accept any props. It reads wallet state from `WalletContext`.
+
+## Connection Flows
+
+The component supports two wallet connection methods:
+
+### WalletConnect Flow
+
+Connects to HashPack and other WalletConnect-compatible wallets:
+
+1. User clicks "Connect with WalletConnect"
+2. WalletConnect modal appears with QR code
+3. User scans QR code with HashPack mobile or connects with HashPack extension
+4. Connection is established to Hedera Testnet (chain ID 296)
+5. Account address is retrieved and stored
+
+**Configuration:**
+```typescript
+const provider = await EthereumProvider.init({
+  projectId: process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID,
+  chains: [296], // Hedera Testnet
+  showQrModal: true,
+  metadata: {
+    name: 'Hedera DX Starter Kit',
+    description: 'Modern Hedera dApp development kit',
+    url: 'http://localhost:3000',
+    icons: ['https://walletconnect.com/walletconnect-logo.png']
+  }
+});
+```
+
+### MetaMask Flow
+
+Connects to MetaMask browser extension:
+
+1. User clicks "Connect with MetaMask"
+2. Component adds Hedera Testnet network to MetaMask (if not already added)
+3. MetaMask prompts user to switch network and approve connection
+4. Account address is retrieved and stored
+
+**Network Configuration:**
+```typescript
+await window.ethereum.request({
+  method: 'wallet_addEthereumChain',
+  params: [{
+    chainId: '0x128', // 296 in hex
+    chainName: 'Hedera Testnet',
+    rpcUrls: ['https://testnet.hashio.io/api'],
+    nativeCurrency: {
+      name: 'HBAR',
+      symbol: 'HBAR',
+      decimals: 18,
+    },
+    blockExplorerUrls: ['https://hashscan.io/testnet'],
+  }],
+});
+```
+
+## Component States
+
+The component renders differently based on connection state:
+
+<Tabs>
+  <Tab title="Disconnected">
+    When no wallet is connected, the component displays:
+
+    - Wallet icon
+    - Heading: "Connect Your Hedera Wallet"
+    - Description text
+    - Two connection buttons:
+      - "Connect with WalletConnect" (primary)
+      - "Connect with MetaMask" (outline)
+    - Link to download HashPack
+    - Instructions for ECDSA account setup
+
+    ```tsx
+    <div className="bg-card border border-border rounded-lg p-6">
+      <div className="text-center space-y-4">
+        {/* Icon */}
+        {/* Title and description */}
+        {/* Error message (if any) */}
+        {/* Connection buttons */}
+        {/* Help text */}
+      </div>
+    </div>
+    ```
+  </Tab>
+
+  <Tab title="Connected">
+    When a wallet is connected, the component displays:
+
+    - Wallet icon with primary color
+    - "Wallet Connected" label
+    - Connected account ID (EVM address or account ID)
+    - Button to view account on HashScan
+    - Disconnect button
+
+    ```tsx
+    <div className="bg-card border border-border rounded-lg p-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {/* Icon and account info */}
+        </div>
+        <div className="flex items-center gap-2">
+          {/* HashScan button */}
+          {/* Disconnect button */}
+        </div>
+      </div>
+    </div>
+    ```
+  </Tab>
+
+  <Tab title="Loading">
+    While connecting, buttons show loading state:
+
+    - Spinner icon
+    - "Connecting..." text
+    - Disabled state
+
+    ```tsx
+    <Button disabled={loading}>
+      {loading ? (
+        <>
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Connecting...
+        </>
+      ) : (
+        // Normal button content
+      )}
+    </Button>
+    ```
+  </Tab>
+
+  <Tab title="Error">
+    If connection fails, an error banner appears:
+
+    ```tsx
+    {error && (
+      <div className="bg-destructive/10 border border-destructive/20 rounded-md p-3">
+        <p className="text-sm text-destructive">{error}</p>
+      </div>
+    )}
+    ```
+
+    Common errors:
+    - "Connection cancelled by user"
+    - "MetaMask is not installed. Please install MetaMask."
+    - "Failed to connect with WalletConnect. Please ensure HashPack is installed..."
+  </Tab>
+</Tabs>
+
+## Wallet Context Integration
+
+The component uses the `useWallet()` hook to access and update wallet state:
+
+```typescript
+const { wallet, setWallet, disconnectWallet } = useWallet();
+
+// Set wallet after connection
+setWallet({
+  accountId: accountId,
+  balance: '0.00',
+  isConnected: true,
+  provider,
+  walletType: 'walletconnect' | 'metamask'
+});
+
+// Disconnect
+disconnectWallet();
+```
+
+## Session Persistence
+
+Wallet connections are persisted to localStorage:
+
+```typescript
+// Save session
+localStorage.setItem('wallet_connected', 'true');
+localStorage.setItem('wallet_account', accountId);
+localStorage.setItem('wallet_type', 'walletconnect');
+
+// Auto-reconnect on mount
+useEffect(() => {
+  const isConnected = localStorage.getItem('wallet_connected');
+  const account = localStorage.getItem('wallet_account');
+  const type = localStorage.getItem('wallet_type');
+  
+  if (isConnected && account && type === 'walletconnect') {
+    handleConnectWalletConnect();
+  }
+}, []);
+```
+
+## Events
+
+The component dispatches a custom event when wallet connects:
+
+```typescript
+window.dispatchEvent(new CustomEvent('walletConnected', { 
+  detail: { accountId } 
+}));
+```
+
+Other components can listen for this event:
+
+```typescript
+useEffect(() => {
+  const handleWalletConnected = (e: CustomEvent) => {
+    console.log('Wallet connected:', e.detail.accountId);
+  };
+  
+  window.addEventListener('walletConnected', handleWalletConnected);
+  return () => window.removeEventListener('walletConnected', handleWalletConnected);
+}, []);
+```
+
+## Environment Variables
+
+Required environment variable:
+
+```bash
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id_here
+```
+
+Get a project ID from [WalletConnect Cloud](https://cloud.walletconnect.com/).
+
+## Styling
+
+The component uses Tailwind CSS classes and adapts to the current theme:
+
+- Card background: `bg-card`
+- Border: `border-border`
+- Text colors: `text-card-foreground`, `text-muted-foreground`
+- Primary accent: `bg-primary/10`, `text-primary`
+
+## Accessibility
+
+- Semantic button elements
+- External link icons for HashScan
+- Loading states with spinner icons
+- Error messages with appropriate color contrast
+- Help text for users without wallets

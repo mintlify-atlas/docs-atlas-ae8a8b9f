@@ -1,0 +1,321 @@
+---
+title: ApiPlayground component
+description: Interactive Mirror Node API testing component
+---
+
+The `ApiPlayground` component provides an interactive interface for testing raw Hedera Mirror Node REST API endpoints. It's useful for developers who want to explore the Mirror Node API directly without writing code.
+
+## Overview
+
+Location: `src/components/ApiPlayground.tsx`
+
+This component allows you to:
+- Enter any Mirror Node API path
+- Execute requests against the configured network
+- View formatted JSON responses
+- Experiment with different API endpoints
+
+## Usage
+
+```tsx
+import { ApiPlayground } from '@/components/ApiPlayground';
+
+export default function Page() {
+  return (
+    <div>
+      <ApiPlayground />
+    </div>
+  );
+}
+```
+
+## Props
+
+The `ApiPlayground` component does not accept any props. It automatically uses the Mirror Node configuration from `MirrorNodeService`.
+
+## Features
+
+### API Path Input
+
+Enter any Mirror Node REST API path:
+
+```tsx
+<input
+  className="flex-1 px-3 py-2 border border-border rounded-md bg-background text-foreground text-sm"
+  value={path}
+  onChange={(e) => setPath(e.target.value)}
+  placeholder="/api/v1/accounts/0.0.1234"
+/>
+```
+
+**Default path**: `/api/v1/transactions?limit=5`
+
+### Base URL Display
+
+Shows the Mirror Node base URL being used:
+
+```tsx
+<span className="text-xs text-muted-foreground">
+  Base: {baseUrl.replace('https://', '')}
+</span>
+```
+
+Example: `testnet.mirrornode.hedera.com`
+
+### Execute Button
+
+Runs the API request:
+
+```tsx
+<Button onClick={run} disabled={loading}>
+  {loading ? 'Running...' : 'Run'}
+</Button>
+```
+
+### Response Display
+
+Shows formatted JSON response:
+
+```tsx
+<pre className="max-h-64 overflow-auto bg-muted/50 p-3 rounded-md text-xs text-muted-foreground">
+  <code>{result || '// Results appear here'}</code>
+</pre>
+```
+
+- Maximum height: 64 units (scrollable)
+- Formatted with 2-space indentation
+- Syntax highlighting via browser default
+
+## Implementation
+
+### State Management
+
+```typescript
+const mirror = MirrorNodeService.getInstance();
+const [path, setPath] = useState('/api/v1/transactions?limit=5');
+const [loading, setLoading] = useState(false);
+const [result, setResult] = useState<string>('');
+const baseUrl = mirror.getBaseUrl();
+```
+
+### Request Execution
+
+```typescript
+const run = async () => {
+  setLoading(true);
+  setResult('');
+  try {
+    const res = await fetch(`${baseUrl}${path}`);
+    const json = await res.json();
+    setResult(JSON.stringify(json, null, 2));
+  } catch (e: any) {
+    setResult(`Error: ${e?.message || String(e)}`);
+  } finally {
+    setLoading(false);
+  }
+};
+```
+
+**Error handling**: Catches and displays fetch errors or JSON parsing errors.
+
+## Example API Paths
+
+Here are some useful Mirror Node API endpoints to try:
+
+### Account Endpoints
+
+```bash
+# Get account information
+/api/v1/accounts/0.0.1234
+
+# Get account token balances
+/api/v1/accounts/0.0.1234/tokens
+
+# Get account transactions
+/api/v1/transactions?account.id=0.0.1234&limit=10
+```
+
+### Token Endpoints
+
+```bash
+# Get token information
+/api/v1/tokens/0.0.5678
+
+# Get token balances
+/api/v1/tokens/0.0.5678/balances
+
+# List all tokens
+/api/v1/tokens?limit=20
+```
+
+### Transaction Endpoints
+
+```bash
+# Get recent transactions
+/api/v1/transactions?limit=5
+
+# Get specific transaction
+/api/v1/transactions/0.0.1234-1234567890-123456789
+
+# Get transactions by type
+/api/v1/transactions?type=CRYPTOTRANSFER&limit=10
+```
+
+### Network Endpoints
+
+```bash
+# Get network supply
+/api/v1/network/supply
+
+# Get network stake
+/api/v1/network/stake
+```
+
+## Use Cases
+
+### 1. API Exploration
+
+Test different Mirror Node endpoints to understand the data structure:
+
+```tsx
+<ApiPlayground />
+```
+
+Try various paths to see what data is available.
+
+### 2. Debugging
+
+Verify API responses when troubleshooting integration issues:
+
+1. Enter the exact API path your code is using
+2. Compare the response with what your code receives
+3. Identify discrepancies or unexpected data
+
+### 3. Learning
+
+Explore the Mirror Node API without writing code:
+
+- See real response structures
+- Understand available query parameters
+- Learn about different transaction types
+
+### 4. Prototyping
+
+Quickly test API queries before implementing them:
+
+```bash
+# Test different limit values
+/api/v1/transactions?limit=5
+/api/v1/transactions?limit=10
+/api/v1/transactions?limit=20
+
+# Test different filters
+/api/v1/transactions?account.id=0.0.1234
+/api/v1/transactions?account.id=0.0.1234&type=CRYPTOTRANSFER
+```
+
+## Response Format
+
+All responses are formatted as JSON with 2-space indentation:
+
+```json
+{
+  "transactions": [
+    {
+      "transaction_id": "0.0.1234-1234567890-123456789",
+      "consensus_timestamp": "1234567890.123456789",
+      "name": "CRYPTOTRANSFER",
+      "result": "SUCCESS",
+      "charged_tx_fee": 100000
+    }
+  ],
+  "links": {
+    "next": null
+  }
+}
+```
+
+## Error Display
+
+Errors are shown in the result area:
+
+```tsx
+// Network error
+Error: Failed to fetch
+
+// Invalid JSON
+Error: Unexpected token < in JSON at position 0
+
+// API error
+{
+  "_status": {
+    "messages": [
+      {
+        "message": "Not found"
+      }
+    ]
+  }
+}
+```
+
+## Styling
+
+The component uses a clean, minimal design:
+
+```tsx
+<div className="bg-card border border-border rounded-lg p-6">
+  {/* Header with title and base URL */}
+  {/* Input and button */}
+  {/* Result display */}
+</div>
+```
+
+- **Card**: `bg-card` with border
+- **Input**: `bg-background` with border
+- **Results**: `bg-muted/50` with monospace font
+- **Scrolling**: `max-h-64 overflow-auto`
+
+## Network Configuration
+
+The component automatically uses the network configured in `MirrorNodeService`:
+
+```typescript
+const mirror = MirrorNodeService.getInstance();
+const baseUrl = mirror.getBaseUrl();
+// Returns: https://testnet.mirrornode.hedera.com or https://mainnet-public.mirrornode.hedera.com
+```
+
+To change networks, update the `NEXT_PUBLIC_HEDERA_NETWORK` environment variable:
+
+```bash
+# .env.local
+NEXT_PUBLIC_HEDERA_NETWORK=testnet  # or 'mainnet'
+```
+
+## Integration with MirrorNodeService
+
+The component leverages `MirrorNodeService` for:
+
+- Getting the base URL
+- Maintaining consistent network configuration
+- Using the same fetch logic as other components
+
+## Accessibility
+
+- Semantic HTML elements
+- Clear input placeholder
+- Descriptive button text
+- Readable monospace font for code
+- Appropriate color contrast
+
+## Related Components
+
+- **AccountDetails**: Uses Mirror Node API to fetch account data
+- **TokenRow**: Displays token information from Mirror Node
+- **MirrorNodeService**: Service layer for API requests
+
+## Mirror Node API Documentation
+
+For complete API documentation, see:
+- [Hedera Mirror Node REST API](https://docs.hedera.com/hedera/sdks-and-apis/rest-api)
+- [Mirror Node API Swagger](https://testnet.mirrornode.hedera.com/api/v1/docs/)
